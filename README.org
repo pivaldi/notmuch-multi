@@ -1,19 +1,17 @@
 #+title: Notmuch-Multi
 
 This package provide some extra features and configurations of the default
-[[https://notmuchmail.org/][Notmuch]] Emacs UI.
+[[https://notmuchmail.org/][Notmuch]] Emacs UI with particular effort handling
+multiple mail accounts.
 
 * Features
--
+TODO…
 
 * Key bindings
--
+TODO…
 
+* Configuration
 
-* Module Options
--
-
-* Futher Configuration
-
-This [[https://github.com/pivaldi/pi-notmuch][here]] the example of the my
-personal configuration and how I use ~PIMacs/notmuch~.
+[[https://github.com/pivaldi/pi-notmuch][Here]] is my
+personal configuration of Notmuch-Multi with Doom Emacs
+in conjunction with [[https://github.com/pivaldi/pimacs/notmuch][PIMacs/notmuch]].
