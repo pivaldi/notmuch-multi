@@ -5,13 +5,236 @@ This package provide some extra features and configurations of the default
 multiple mail accounts.
 
 * Features
-TODO…
+Notmuch Emacs UI does not organize by default multiple accounts separately like Gnus does for
+example…
+
+This package allows
+- To configure and show separately multiple mail accounts through one variable ;
+- Configure the default Notmuch Key binding "j" so that it allows to select one account by
+  a corresponding account prefix and next the corresponding key tag relatively
+  to this account.
+- More configured features are explained in [[https://github.com/pivaldi/pi-notmuch][my personal configuration of PIMacs/notmuch]]
+
+* Screenshots
+1. "Notmuch Hello" screen showing two accounts :
+<p align="center">
+  <img src="./assets/notmuch-multi-hello.png" alt="screenshot Notmuch Hello with multi accounts support" style="max-width:100%;">
+ </p>
+1. "Notmuch Hello" screen showing two accounts collapsed :
+<p align="center">
+  <img src="./assets/notmuch-multi-hello-collapsed.png" alt="screenshot Notmuch Hello collapsed with multi accounts support" style="max-width:100%;">
+ </p>
+1. Pressing key "j" in "Notmuch Hello" screen ask for all configured tags
+   searches prefixed by key accounts respectively :
+<p align="center">
+  <img src="./assets/notmuch-pressing-j-key.png" alt="screenshot Notmuch Hello with multi accounts support" style="max-width:100%;">
+ </p>
+1. Continuing the key press with "i" show only tags searches associated to the
+   account ~ivaldi.me~ :
+<p align="center">
+  <img src="./assets/notmuch-pressing-ji-key.png" alt="screenshot Notmuch Hello with multi accounts support" style="max-width:100%;">
+ </p>
+1. What the tree view can looks like, this is also available for the  search
+   view (see futher the configuration part) :
+<p align="center">
+  <img src="./assets/notmuch-tree.png" alt="screenshot Notmuch Tree View with truncated and ellipsed subject" style="max-width:100%;">
+ </p>
 
 * Key bindings
-TODO…
+Example of the keys binding that I use (see the ~Doom Emacs~ syntax for the documentation) :
+#+begin_src lisp
+(define-key (notmuch-search-mode-map) (kbd "A") #'notmuch-search-archive-thread)
+(define-key (notmuch-search-mode-map) (kbd "/") #'notmuch-search-filter) ; alias for l
+(define-key (notmuch-search-mode-map) (kbd "r") #'notmuch-search-reply-to-thread-sender)
+(define-key (notmuch-search-mode-map) (kbd "R") #'notmuch-search-reply-to-thread) ; reply to all
+(define-key (notmuch-search-mode-map) (kbd "g") #'notmuch-multi-refresh-buffer)
+(define-key (notmuch-search-mode-map) (kbd "d") #'notmuch-multi-search-delete-thread)
+(define-key (notmuch-search-mode-map) (kbd "D") #'notmuch-multi-search-delete-all)
+(define-key (notmuch-search-mode-map) (kbd "e") #'notmuch-multi-search-expire-thread)
+(define-key (notmuch-search-mode-map) (kbd "E") #'notmuch-multi-search-expire-all)
+(define-key (notmuch-search-mode-map) (kbd "s") #'notmuch-multi-search-spam-thread)
+(define-key (notmuch-search-mode-map) (kbd "S") #'notmuch-multi-search-spam-all)
+(define-key (notmuch-search-mode-map) (kbd "!") #'notmuch-multi-search-flag-thread)
 
+(define-key (notmuch-tree-mode-map) (kbd "A") #'notmuch-tree-archive-thread)
+(define-key (notmuch-tree-mode-map) (kbd "/") #'notmuch-tree-filter) ; alias for l
+(define-key (notmuch-tree-mode-map) (kbd "r") #'notmuch-tree-reply-sender)
+(define-key (notmuch-tree-mode-map) (kbd "R") #'notmuch-tree-reply) ; reply to all
+(define-key (notmuch-tree-mode-map) (kbd "d") #'notmuch-multi-tree-delete-message)
+(define-key (notmuch-tree-mode-map) (kbd "D") #'notmuch-multi-tree-delete-thread)
+(define-key (notmuch-tree-mode-map) (kbd "e") #'notmuch-multi-tree-expire-message)
+(define-key (notmuch-tree-mode-map) (kbd "E") #'notmuch-multi-tree-expire-thread)
+(define-key (notmuch-tree-mode-map) (kbd "s") #'notmuch-multi-tree-spam-message)
+(define-key (notmuch-tree-mode-map) (kbd "S") #'notmuch-multi-tree-spam-thread)
+(define-key (notmuch-tree-mode-map) (kbd "F") #'notmuch-multi-tree-flag-thread)
+(define-key (notmuch-tree-mode-map) (kbd "!") #'notmuch-multi-tree-flag-message)
+(define-key (notmuch-tree-mode-map) (kbd "g") #'notmuch-multi-refresh-buffer)
+
+(define-key (notmuch-show-mode-map) (kbd "C-t !") #'notmuch-multi-show-flag-message)
+(define-key (notmuch-show-mode-map) (kbd "C-t a") #'notmuch-show-archive-message)
+(define-key (notmuch-show-mode-map) (kbd "C-t A") #'notmuch-show-archive-thread)
+(define-key (notmuch-show-mode-map) (kbd "r") #'notmuch-show-reply-sender)
+(define-key (notmuch-show-mode-map) (kbd "R") #'notmuch-show-reply)
+(define-key (notmuch-show-mode-map) (kbd "C-t d") #'notmuch-multi-show-delete-message)
+(define-key (notmuch-show-mode-map) (kbd "C-t e") #'notmuch-multi-show-expire-message)
+(define-key (notmuch-show-mode-map) (kbd "C-t s") #'notmuch-multi-show-spam-message)
+#+end_src
+The Doom Emacs syntax with ~which-key~ documentation :
+#+begin_src lisp
+(map!
+     :map notmuch-search-mode-map
+     :desc "Archive the currently selected thread or region. #pim" "A" #'notmuch-search-archive-thread
+     :desc "Filter or LIMIT the current search results. #pim" "/" #'notmuch-search-filter ; alias for l
+     :desc "Reply to the entire current thread. #pim" "r" #'notmuch-search-reply-to-thread-sender
+     :desc "Reply-all to the entire current thread. #pim" "R" #'notmuch-search-reply-to-thread ; reply to all
+     :desc "Refresh current buffer or all notmuch buffers if prefixed. #pim" "g" #'notmuch-multi-refresh-buffer
+     :desc "Mark as deleted the currently selected thread. #pim" "d" #'notmuch-multi-search-delete-thread
+     :desc "Mark as deleted the currently selected thread. #pim" "D" #'notmuch-multi-search-delete-all
+     :desc "Mark as expirable the currently selected thread. #pim" "e" #'notmuch-multi-search-expire-thread
+     :desc "Mark as expirable the currently selected thread. #pim" "E" #'notmuch-multi-search-expire-all
+     :desc "Mark as spam the currently selected thread. #pim" "s" #'notmuch-multi-search-spam-thread
+     :desc "Mark as spam the currently selected thread. #pim" "S" #'notmuch-multi-search-spam-all
+     :desc "Mark as flagged the currently selected thread. #pim" "!" #'notmuch-multi-search-flag-thread
+
+     :map notmuch-tree-mode-map
+     :desc "Archive the currently selected thread or region. #pim" "A" #'notmuch-tree-archive-thread
+     :desc "Filter or LIMIT the current search results. #pim" "/" #'notmuch-tree-filter ; alias for l
+     :desc "Reply to the sender of the current message. #pim" "r" #'notmuch-tree-reply-sender
+     :desc "Reply-all of the current message. #pim" "R" #'notmuch-tree-reply ; reply to all
+     :desc "Mark as deleted the currently selected message. #pim" "d" #'notmuch-multi-tree-delete-message
+     :desc "Mark as deleted the currently selected thread. #pim" "D" #'notmuch-multi-tree-delete-thread
+     :desc "Mark as expirable the currently selected message. #pim" "e" #'notmuch-multi-tree-expire-message
+     :desc "Mark as expirable the currently selected thread. #pim" "E" #'notmuch-multi-tree-expire-thread
+     :desc "Mark as spam the currently selected message. #pim" "s" #'notmuch-multi-tree-spam-message
+     :desc "Mark as spam the currently selected thread. #pim" "S" #'notmuch-multi-tree-spam-thread
+     :desc "Mark as flagged the currently selected thread. #pim" "F" #'notmuch-multi-tree-flag-thread
+     :desc "Mark as flagged the currently selected message. #pim" "!" #'notmuch-multi-tree-flag-message
+     :desc "Refresh current buffer or all notmuch buffers if prefixed. #pim" "g" #'notmuch-multi-refresh-buffer
+
+     :map notmuch-show-mode-map
+     :desc "Tag as flagged or untag is prefixed. #pim" "!" #'notmuch-multi-show-flag-message
+     :desc "Archive the current message. #pim" "a" #'notmuch-show-archive-message
+     :desc "Archive each message in thread. #pim" "A" #'notmuch-show-archive-thread
+     :desc "Reply-to of the current message. #pim" "r" #'notmuch-show-reply-sender
+     :desc "Reply-all of the current message. #pim" "R" #'notmuch-show-reply
+     :desc "Tag as deleted or untag is prefixed. #pim" "C-t d"  #'notmuch-multi-show-delete-message
+     :desc "Tag as deleted or untag is prefixed. #pim" "C-t e"  #'notmuch-multi-show-expire-message
+     :desc "Tag as spam or untag is prefixed. #pim" "C-t s" #'notmuch-multi-show-spam-message
+     )
+#+end_src
 * Configuration
 
 [[https://github.com/pivaldi/pi-notmuch][Here]] is my
 personal configuration of Notmuch-Multi with Doom Emacs
 in conjunction with [[https://github.com/pivaldi/pimacs/notmuch][PIMacs/notmuch]].
+
+The main widget provided by this package is
+~notmuch-multi-hello-insert-accounts-searches~ to be added to
+~notmuch-hello-sections~.
+Here the ~notmuch-hello-sections~ used to generate the screenshots :
+#+begin_src lisp
+(setq
+  notmuch-hello-sections '(
+    notmuch-multi-hello-insert-accounts-searches
+    ;; notmuch-hello-insert-saved-searches ;; Already into notmuch-multi-hello
+    ;; notmuch-hello-insert-search ;; I prefer the keybinding "s"
+    ;; notmuch-hello-insert-recent-searches ;; I prefer the keybinding "s" folowed by M-p
+    notmuch-hello-insert-alltags
+    ;; notmuch-hello-insert-footer ;; completly useless (hit the key "?")
+    ))
+#+end_src
+
+In the screenshots I use this accounts configurations using the function ~notmuch-multi-accounts-saved-searches-set~ :
+#+begin_src lisp
+(setq
+   notmuch-saved-searches nil
+   pi-notmuch-saved-searches
+   `(
+     ( :name "Inbox"
+             :query "tag:inbox"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "i"))
+     ( :name "Unread Inbox"
+             :query "tag:unread and tag:inbox"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "u"))
+     ( :name "Unread"
+             :query "tag:unread"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "U"))
+     ( :name "All"
+             :query "*"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "a"))
+     ( :name "Archived"
+             :query "tag:archived"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "A"))
+     ( :name "Important"
+             :query "tag:important"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "I"))
+     ( :name "Starred"
+             :query "tag:flagged"
+             :sort-order newest-first
+             :search-type tree
+             :key ,(kbd "s"))
+     ))
+
+  (notmuch-multi-accounts-saved-searches-set
+   `((:account (:name "IVALDI.ME" :query "tag:ivaldi.me" :key-prefix "i")
+      :searches ,(append pi-notmuch-saved-searches
+                         `((:name "Unclassified"
+                            :query "folder:ivaldi.me/inbox AND tag:read AND NOT tag:expire"
+                            :sort-order newest-first
+                            :search-type tree
+                            :key ,(kbd "x")
+                            ))
+                         ))
+     (:account (:name "OVYA.FR" :query "tag:ovya.fr" :key-prefix "o")
+      :searches
+      ,(append
+        pi-notmuch-saved-searches
+        `(( :name "Redmine"
+            :query "tag:redmine"
+            :sort-order newest-first
+            :search-type tree
+            :key ,(kbd "r"))
+          ( :name "Admin"
+                  :query "tag:admin"
+                  :sort-order newest-first
+                  :search-type tree
+                  :key ,(kbd "d"))
+          ( :name "Cron"
+                  :query "tag:cron"
+                  :sort-order newest-first
+                  :search-type tree
+                  :key ,(kbd "c"))
+          ( :name "Igal/Stanley"
+                  :query "tag:igal or tag:stanley"
+                  :sort-order newest-first
+                  :search-type tree
+                  :key ,(kbd "/")))
+        ))))
+#+end_src
+
+Finally, to obtain subject truncation with ellipsis, I configure the variables
+~notmuch-*-result-format~ using ~notmuch-multi-search-format-subject~ that
+does the job :
+#+begin_src lisp
+(setq notmuch-search-result-format
+      '(("date" . "%12s ") ("count" . "%-7s ") ("authors" . "%-30s ")
+        (notmuch-multi-search-format-subject . "%-90s ") ("tags" . "(%s)"))
+      notmuch-tree-result-format
+      '(("date" . "%12s  ") ("authors" . "%-30s")
+        ((("tree" . "%s") (notmuch-multi-tree-format-subject . " %-80s")) . " %-90s ") ("tags" . "(%s)"))
+      notmuch-unthreaded-result-format
+      '(("date" . "%12s ") ("authors" . "%-30s ")
+        (notmuch-multi-search-format-subject . "%-90s ") ("tags" . "(%s)")))
+#+end_src
