@@ -16,28 +16,24 @@ This package allows
 - More configured features are explained in [[https://github.com/pivaldi/pi-notmuch][my personal configuration of PIMacs/notmuch]]
 
 * Screenshots
-#+ATTR_HTML: :align center
-#+ATTR_HTML: :max-width 100%
-#+CAPTION: "Notmuch Hello" screen showing two accounts
+1. Notmuch Hello screen showing two accounts
+#+ATTR_HTML: :align center :max-width 100%
+#+CAPTION: Notmuch Hello screen showing two accounts
 [[./assets/notmuch-multi-hello.png]]"
 
-#+ATTR_HTML: :align center
-#+ATTR_HTML: :max-width 100%
+#+ATTR_HTML: :align center :max-width 100%
 #+CAPTION: "Notmuch Hello" screen showing two accounts collapsed
 [[./assets/notmuch-multi-hello-collapsed.png]]
 
-#+ATTR_HTML: :align center
-#+ATTR_HTML: :max-width 100%
+#+ATTR_HTML: :align center :max-width 100%
 #+CAPTION: Pressing key "j" in "Notmuch Hello" screen ask for all configured tags searches prefixed by key accounts respectively
 [[./assets/notmuch-pressing-j-key.png]]
 
-#+ATTR_HTML: :align center
-#+ATTR_HTML: :max-width 100%
+#+ATTR_HTML: :align center :max-width 100%
 #+CAPTION: Continuing the key press with "i" after j show only tags searches associated to the account ~ivaldi.me~
 [[./assets/notmuch-pressing-ji-key.png]]
 
-#+ATTR_HTML: :align center
-#+ATTR_HTML: :max-width 100%
+#+ATTR_HTML: :align center :max-width 100%
 #+CAPTION: What the tree and search view can looks like (ellipsis and coloration from read/unread/starred tags)
 [[./assets/notmuch-tree.png]]
 
