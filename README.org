@@ -16,29 +16,30 @@ This package allows
 - More configured features are explained in [[https://github.com/pivaldi/pi-notmuch][my personal configuration of PIMacs/notmuch]]
 
 * Screenshots
-1. "Notmuch Hello" screen showing two accounts :
-<p align="center">
-  <img src="./assets/notmuch-multi-hello.png" alt="screenshot Notmuch Hello with multi accounts support" style="max-width:100%;">
- </p>
-1. "Notmuch Hello" screen showing two accounts collapsed :
-<p align="center">
-  <img src="./assets/notmuch-multi-hello-collapsed.png" alt="screenshot Notmuch Hello collapsed with multi accounts support" style="max-width:100%;">
- </p>
-1. Pressing key "j" in "Notmuch Hello" screen ask for all configured tags
-   searches prefixed by key accounts respectively :
-<p align="center">
-  <img src="./assets/notmuch-pressing-j-key.png" alt="screenshot Notmuch Hello with multi accounts support" style="max-width:100%;">
- </p>
-1. Continuing the key press with "i" show only tags searches associated to the
-   account ~ivaldi.me~ :
-<p align="center">
-  <img src="./assets/notmuch-pressing-ji-key.png" alt="screenshot Notmuch Hello with multi accounts support" style="max-width:100%;">
- </p>
-1. What the tree view can looks like, this is also available for the  search
-   view (see futher the configuration part) :
-<p align="center">
-  <img src="./assets/notmuch-tree.png" alt="screenshot Notmuch Tree View with truncated and ellipsed subject" style="max-width:100%;">
- </p>
+#+ATTR_HTML: :align center
+#+ATTR_HTML: :max-width 100%
+#+CAPTION: "Notmuch Hello" screen showing two accounts
+[[./assets/notmuch-multi-hello.png]]"
+
+#+ATTR_HTML: :align center
+#+ATTR_HTML: :max-width 100%
+#+CAPTION: "Notmuch Hello" screen showing two accounts collapsed
+[[./assets/notmuch-multi-hello-collapsed.png]]
+
+#+ATTR_HTML: :align center
+#+ATTR_HTML: :max-width 100%
+#+CAPTION: Pressing key "j" in "Notmuch Hello" screen ask for all configured tags searches prefixed by key accounts respectively
+[[./assets/notmuch-pressing-j-key.png]]
+
+#+ATTR_HTML: :align center
+#+ATTR_HTML: :max-width 100%
+#+CAPTION: Continuing the key press with "i" after j show only tags searches associated to the account ~ivaldi.me~
+[[./assets/notmuch-pressing-ji-key.png]]
+
+#+ATTR_HTML: :align center
+#+ATTR_HTML: :max-width 100%
+#+CAPTION: What the tree and search view can looks like (ellipsis and coloration from read/unread/starred tags)
+[[./assets/notmuch-tree.png]]
 
 * Key bindings
 Example of the keys binding that I use (see the ~Doom Emacs~ syntax for the documentation) :
