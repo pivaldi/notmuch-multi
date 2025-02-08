@@ -274,20 +274,28 @@ reverse the application of the *added* tags."
 Modified version of
 https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
   (declare (indent defun))
-  `(defun ,name (&optional untag)
+  `(defun ,name (&optional repeat)
      ,(format
        "Mark with `%s' the currently selected message in notmuch-tree-mode.
 
-With optional prefix argument (\\[universal-argument]) as UNTAG,
-reverse the application of the *added* tags.
+With optional prefix argument as REPEAT, a number:
+- if <= 0: reverse the application of the *added* tags
+- if >= 0: apply the tag for the REPEAT next message.
 
 This function advances to the next message when finished."
        tags)
-     (interactive current-prefix-arg)
-     (let ((rmtags (if untag (notmuch-multi--notmuch-remove-untags ,tags) ,tags)))
+     (interactive "P")
+     (setq repeat (or repeat 1))
+     (let* ((untag (<= repeat 0))
+            (rmtags (if untag (notmuch-multi--notmuch-remove-untags ,tags) ,tags))
+            (count (max 1 repeat)))
        (when rmtags
-         (notmuch-tree-tag (notmuch-tag-change-list rmtags untag))
-         (notmuch-tree-next-message)))))
+         (let ((i 0))
+           (while (< i count)
+             (message "Code block is running")
+             (setq i (1+ i))
+             (notmuch-tree-tag (notmuch-tag-change-list rmtags untag))
+             (notmuch-tree-next-message)))))))
 
 (notmuch-multi-tree-tag-message
   notmuch-multi-tree-delete-message
@@ -603,7 +611,7 @@ Usage : (notmuch-multi-count-query \"folder:here and tag:unread\")"
   (let ((count (string-to-number
                 (with-temp-buffer
                   (shell-command
-                   (format "notmuch count %s" query) t)
+                   (format "notmuch count --exclude=false tag:deleted %s" query) t)
                   (buffer-substring-no-properties (point-min) (1- (point-max)))))))
     (message (format "%d" count))
     count))

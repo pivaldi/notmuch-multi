@@ -146,7 +146,8 @@ Here the ~notmuch-hello-sections~ used to generate the screenshots :
     ))
 #+end_src
 
-In the screenshots I use this accounts configurations using the function ~notmuch-multi-accounts-saved-searches-set~ :
+In the screenshots I use this accounts configurations using the function
+~notmuch-multi-accounts-saved-searches-set~ :
 #+begin_src lisp
 (setq
    notmuch-saved-searches nil
