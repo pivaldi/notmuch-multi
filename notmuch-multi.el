@@ -198,7 +198,7 @@ See `notmuch-multi-hello-insert-buttons`."
 Modified version of
 https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
   (declare (indent defun))
-  `(defun ,name (&optional untag)
+  `(defun ,name  (&optional untag beg end)
      ,(format
        "Mark with `%s' the currently selected thread.
 
