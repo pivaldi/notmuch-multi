@@ -241,3 +241,6 @@ does the job :
       '(("date" . "%12s ") ("authors" . "%-30s ")
         (notmuch-multi-search-format-subject . "%-90s ") ("tags" . "(%s)")))
 #+end_src
+
+* If you appreciate this project
+[[https://buymeacoffee.com/pivaldi][☕ Buy Me a Coffee]]
