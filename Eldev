@@ -1,0 +1,20 @@
+; -*- mode: emacs-lisp; lexical-binding: t -*-
+
+;; Eldev configuration for notmuch-multi.
+;;
+;; The package declares a runtime dependency on `notmuch' (see the
+;; Package-Requires header in notmuch-multi.el).  The notmuch Emacs Lisp is
+;; published on MELPA -- not on GNU/NonGNU ELPA -- so make the archives
+;; available here.  `eldev test' then installs notmuch headlessly before
+;; loading and running the ERT suite in test/, with no dependency on any
+;; personal Emacs configuration.
+;;
+;; Common commands:
+;;   eldev test                 ; install deps + run the ERT suite (test/)
+;;   eldev test -t NAME-PATTERN ; run a subset, e.g. eldev test -t get-command
+;;   eldev compile              ; byte-compile, surfacing warnings
+;;   eldev lint                 ; run available linters (if installed)
+
+(eldev-use-package-archive 'gnu-elpa)
+(eldev-use-package-archive 'nongnu-elpa)
+(eldev-use-package-archive 'melpa-unstable)

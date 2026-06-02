@@ -242,5 +242,39 @@ does the job :
         (notmuch-multi-search-format-subject . "%-90s ") ("tags" . "(%s)")))
 #+end_src
 
+* Fetching mail per account
+From the =notmuch-hello= screen you can fetch (and index) the mail of a single
+account, instead of running a global poll.
+
+Define a fetch command per account with the =:get-command= property of the
+account plist (a shell command string) :
+#+begin_src lisp
+(notmuch-multi-accounts-saved-searches-set
+ `((:account (:name "IVALDI.ME" :query "tag:ivaldi.me" :key-prefix "i"
+              :get-command "mbsync --config \"${HOME}/.isyncrc\" -D ivaldi.me")
+    :searches ,pi-notmuch-saved-searches)
+   (:account (:name "OVYA.FR" :query "tag:ovya.fr" :key-prefix "o"
+              :get-command "mbsync --config \"${HOME}/.isyncrc\" -D ovya.fr")
+    :searches ,pi-notmuch-saved-searches)))
+#+end_src
+
+Then, in the =notmuch-hello= buffer :
+- =M-g= fetches the account whose section point is in.
+- =a <key-prefix> g= fetches a named account regardless of point — e.g. =a i g=
+  for the account with =:key-prefix "i"= above, =a o g= for =:key-prefix "o"=.
+  =a= is an "account action" prefix, parallel to the =j= jump prefix used for
+  saved searches (=j i x=, left unchanged).
+
+Each fetch runs =:get-command=, then the indexing command
+=notmuch-multi-index-command= (default ="notmuch new"=), then refreshes the
+hello buffer so the counts update. The fetch runs asynchronously; Emacs stays
+responsive, and the command output goes to a =*notmuch-multi-get: NAME*= buffer.
+
+To index without running your notmuch hooks (for instance if a hook itself
+synchronises all accounts), set :
+#+begin_src lisp
+(setq notmuch-multi-index-command "notmuch new --no-hooks")
+#+end_src
+
 * If you appreciate this project
 [[https://buymeacoffee.com/pivaldi][☕ Buy Me a Coffee]]

@@ -21,6 +21,7 @@
 ;;; Code:
 
 (require 'notmuch)
+(require 'notmuch-hello)
 
 (defgroup notmuch-multi ()
   "Extensions for notmuch.el."
@@ -77,6 +78,14 @@ This gets the `notmuch-tag-flagged' face, if that is specified in
   :type '(repeat string)
   :group 'notmuch-multi)
 
+(defcustom notmuch-multi-index-command "notmuch new"
+  "Shell command run after an account's `:get-command' to index fetched mail.
+Run by `notmuch-multi-get-mail-at-point' and the per-account
+\"a <key-prefix> g\" bindings.  Set to e.g. \"notmuch new --no-hooks\" to
+skip notmuch hooks."
+  :type 'string
+  :group 'notmuch-multi)
+
 (define-widget 'notmuch-multi-account-plist 'list
   "An email account.
 
@@ -84,7 +93,10 @@ An account is a plist. Supported properties are
 
   :name         The name of the account (required).
   :query        Search for all the email for this account (required).
-  :key          Optional prefix shortcut key open `notmuch-jump-search' relatively to this account.
+  :key-prefix   Optional shortcut key prefix for `notmuch-jump-search' and the
+                \"a <key-prefix> g\" mail-fetch binding, relative to this account.
+  :get-command  Optional shell command (string) run to fetch this account's mail
+                via `notmuch-multi-get-mail-at-point' or \"a <key-prefix> g\".
 "
   :tag "Account Definition"
   :args '((list :inline t
@@ -97,6 +109,9 @@ An account is a plist. Supported properties are
                   (string :format "%v"))
            (group :format "%v" :inline t
                   (const :format "  Shortcut key prefix: " :key-prefix)
+                  (string :format "%v"))
+           (group :format "%v" :inline t
+                  (const :format "  Get-mail command: " :get-command)
                   (string :format "%v")))
           ))
 
@@ -124,20 +139,37 @@ Modified version of `notmuch-hello-filtered-query' to handle query equal to *."
       (concat "(" query ") and (" filter ")")))
    (t query)))
 
+(defvar notmuch-multi--installed-get-keys nil
+  "Key sequences bound in `notmuch-hello-mode-map' for per-account mail fetch.
+Maintained by `notmuch-multi-accounts-saved-searches-set' so stale bindings
+are removed when accounts are reconfigured.")
+
 ;;;###autoload
 (defun notmuch-multi-accounts-saved-searches-set (accounts-searches)
   "Setter of `notmuch-multi-accounts-saved-searches'.
 Push the searches from accounts into `notmuch-saved-searches'
 with computed nane, key and query.
 
+Also (re)install the per-account \"a <key-prefix> g\" mail-fetch bindings in
+`notmuch-hello-mode-map' for accounts that define a non-empty `:key-prefix'.
+
 Must be used instead of setq."
   (setq notmuch-multi-accounts-saved-searches accounts-searches)
+  (dolist (key notmuch-multi--installed-get-keys)
+    (define-key notmuch-hello-mode-map key nil))
+  (setq notmuch-multi--installed-get-keys nil)
   (dolist (account-searches accounts-searches)
     (let* ((searches (plist-get account-searches :searches))
            (account (plist-get account-searches :account))
            (account-name (plist-get account :name))
            (account-query (plist-get account :query))
            (kprefix (plist-get account :key-prefix)))
+      (when (and kprefix (not (string= kprefix "")))
+        (let ((key (kbd (concat "a " kprefix " g")))
+              (acct account))
+          (define-key notmuch-hello-mode-map key
+                      (lambda () (interactive) (notmuch-multi--get-account-mail acct)))
+          (push key notmuch-multi--installed-get-keys)))
       (dolist (search searches)
         (let ((s (copy-sequence search)))
           (when search
@@ -151,7 +183,7 @@ Must be used instead of setq."
       )) notmuch-saved-searches)
 
 (defcustom notmuch-multi-accounts-saved-searches
-  `((:account (:name "MAIN" :query "*" :key ,(kbd "m"))
+  `((:account (:name "MAIN" :query "*")
      :searches ,notmuch-saved-searches))
   "A list of email account associated with `notmuch-saved-searches'.
 
@@ -557,12 +589,17 @@ Supports the following entries in OPTIONS as a plist:
 (defun notmuch-multi-hello-insert-account-searches (account-searches)
   "Insert a section of account associated with saved-searches.
 
+Stamp the inserted region with the `notmuch-multi-account' text property
+so `notmuch-multi-get-mail-at-point' can recover the account at point.
+
 See `notmuch-multi-accounts-saved-searches'."
   (let* ((searches (plist-get account-searches :searches))
          (account (plist-get account-searches :account))
-         (account-query (plist-get account :query)))
+         (account-query (plist-get account :query))
+         (start (point)))
     (notmuch-multi-hello-insert-searches
-     (plist-get account :name) searches :filter account-query :show-empty-searches t)))
+     (plist-get account :name) searches :filter account-query :show-empty-searches t)
+    (put-text-property start (point) 'notmuch-multi-account account)))
 
 (defun notmuch-multi-hello-insert-accounts-searches ()
   "Insert all `notmuch-multi-accounts-saved-searches' widgets."
@@ -570,6 +607,75 @@ See `notmuch-multi-accounts-saved-searches'."
     (when account-searches
       (notmuch-multi-hello-insert-account-searches account-searches)
       (widget-insert "\n"))))
+
+(defun notmuch-multi--get-command (account)
+  "Return the shell fetch command string for ACCOUNT.
+ACCOUNT's `:get-command' may be a string, or a function called with
+ACCOUNT that returns a string.  Signal a `user-error' when ACCOUNT has
+no usable `:get-command'."
+  (let* ((name (plist-get account :name))
+         (gc (plist-get account :get-command))
+         (cmd (cond ((functionp gc) (funcall gc account))
+                    ((stringp gc) gc)
+                    (t nil))))
+    (unless (and (stringp cmd) (not (string= cmd "")))
+      (user-error "No :get-command configured for account %s" name))
+    cmd))
+
+(defun notmuch-multi--account-at-point ()
+  "Return the account plist of the hello section at point, or nil.
+Account sections are stamped with the `notmuch-multi-account' text
+property by `notmuch-multi-hello-insert-account-searches'.  When point
+sits on the blank line separating two sections, the property is read
+from the preceding character, so the section just above point wins."
+  (or (get-text-property (point) 'notmuch-multi-account)
+      (and (> (point) (point-min))
+           (get-text-property (1- (point)) 'notmuch-multi-account))))
+
+(defun notmuch-multi--get-account-mail (account)
+  "Fetch and index mail for ACCOUNT, then refresh this hello buffer.
+Run ACCOUNT's `:get-command' followed by `notmuch-multi-index-command'
+asynchronously.  On success, refresh the originating hello buffer; on
+failure, show the process output buffer.  See `notmuch-multi-index-command'."
+  (let* ((name (plist-get account :name))
+         (cmd (notmuch-multi--get-command account))
+         (procname (format "notmuch-multi-get-%s" name))
+         (bufname (format "*notmuch-multi-get: %s*" name))
+         (full (concat cmd " && " notmuch-multi-index-command))
+         (hello-buf (current-buffer)))
+    (when (process-live-p (get-process procname))
+      (user-error "Already fetching mail for %s" name))
+    (message "Fetching mail for %s…" name)
+    (make-process
+     :name procname
+     :buffer bufname
+     :connection-type 'pipe
+     :command (list shell-file-name shell-command-switch full)
+     :sentinel
+     (lambda (proc _event)
+       (when (memq (process-status proc) '(exit signal))
+         (if (and (eq (process-status proc) 'exit)
+                  (zerop (process-exit-status proc)))
+             (progn
+               (message "%s: fetched and indexed" name)
+               (when (buffer-live-p hello-buf)
+                 (with-current-buffer hello-buf
+                   (notmuch-refresh-this-buffer))))
+           (message "%s: fetch failed (see %s)" name bufname)
+           (display-buffer bufname)))))))
+
+;;;###autoload
+(defun notmuch-multi-get-mail-at-point ()
+  "Fetch and index mail for the account whose hello section is at point.
+Only meaningful in the `notmuch-hello' screen.  Bound to \\[notmuch-multi-get-mail-at-point]
+in `notmuch-hello-mode'.  See `notmuch-multi--get-account-mail'."
+  (interactive)
+  (let ((account (notmuch-multi--account-at-point)))
+    (unless account
+      (user-error "No account at point"))
+    (notmuch-multi--get-account-mail account)))
+
+(define-key notmuch-hello-mode-map (kbd "M-g") #'notmuch-multi-get-mail-at-point)
 
 ;;;###autoload
 (defun notmuch-multi-delete-mail ()

@@ -1,0 +1,10 @@
+# Eldev working directory (installed deps, build cache, etc.)
+/.eldev/
+# Eldev per-developer local overrides (machine-specific; not shared)
+/Eldev-local
+
+# Byte-compiled Emacs Lisp
+*.elc
+
+# Scratch commit-message file (used with `git commit -F COMMIT_MSG`)
+/COMMIT_MSG
