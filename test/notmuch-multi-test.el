@@ -63,6 +63,11 @@ subprocess from wedging the whole test run."
   (should (boundp 'notmuch-multi-index-command))
   (should (equal notmuch-multi-index-command "notmuch new")))
 
+(ert-deftest notmuch-multi-test-schedule-verbose-default ()
+  "`notmuch-multi-schedule-verbose' is defined and defaults to t."
+  (should (boundp 'notmuch-multi-schedule-verbose))
+  (should (eq notmuch-multi-schedule-verbose t)))
+
 ;;;; notmuch-multi-account-plist (Customize widget)
 
 (ert-deftest notmuch-multi-test-account-widget-converts ()
@@ -73,6 +78,12 @@ subprocess from wedging the whole test run."
   "The account-plist widget documentation mentions `:get-command'."
   (should (string-match-p
            ":get-command"
+           (get 'notmuch-multi-account-plist 'widget-documentation))))
+
+(ert-deftest notmuch-multi-test-account-widget-documents-get-interval ()
+  "The account-plist widget documentation mentions `:get-interval'."
+  (should (string-match-p
+           ":get-interval"
            (get 'notmuch-multi-account-plist 'widget-documentation))))
 
 ;;;; notmuch-multi-hello-filtered-query (pure)
@@ -280,6 +291,209 @@ subprocess from wedging the whole test run."
     (notmuch-multi-accounts-saved-searches-set
      '((:account (:name "MAIN" :query "*") :searches nil)))
     (should (null notmuch-multi--installed-get-keys))))
+
+;;;; Scheduler — interval validation
+
+(ert-deftest notmuch-multi-test-valid-interval-p ()
+  "`notmuch-multi--valid-interval-p' accepts positive numbers and non-empty
+strings, and rejects nil, zero, negatives and the empty string."
+  (should (notmuch-multi--valid-interval-p 300))
+  (should (notmuch-multi--valid-interval-p 0.5))
+  (should (notmuch-multi--valid-interval-p "5 min"))
+  (should-not (notmuch-multi--valid-interval-p nil))
+  (should-not (notmuch-multi--valid-interval-p 0))
+  (should-not (notmuch-multi--valid-interval-p -10))
+  (should-not (notmuch-multi--valid-interval-p "")))
+
+(ert-deftest notmuch-multi-test-schedulable-account-p ()
+  "An account is schedulable only with a usable :get-command and a valid
+:get-interval."
+  (should (notmuch-multi--schedulable-account-p
+           '(:name "OK" :get-command "true" :get-interval 300)))
+  (should (notmuch-multi--schedulable-account-p
+           '(:name "FN" :get-command (lambda (_a) "true") :get-interval "5 min")))
+  (should-not (notmuch-multi--schedulable-account-p
+               '(:name "NOINT" :get-command "true")))
+  (should-not (notmuch-multi--schedulable-account-p
+               '(:name "NOCMD" :get-interval 300)))
+  (should-not (notmuch-multi--schedulable-account-p
+               '(:name "EMPTYCMD" :get-command "" :get-interval 300)))
+  (should-not (notmuch-multi--schedulable-account-p
+               '(:name "BADINT" :get-command "true" :get-interval 0))))
+
+(ert-deftest notmuch-multi-test-schedule-start-arms-one-per-account ()
+  "`-start' arms one timer per schedulable account, each calling the core
+fetch with scheduled = t."
+  (let ((notmuch-multi--schedule-timers nil)
+        (notmuch-multi-accounts-saved-searches
+         '((:account (:name "A" :query "*" :get-command "true" :get-interval 300)
+            :searches nil)
+           (:account (:name "B" :query "*" :get-command "true" :get-interval 600)
+            :searches nil)))
+        (calls '()))
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (first repeat fn &rest args)
+                 (push (list first repeat fn args) calls)
+                 'fake-timer)))
+      (notmuch-multi-schedule-start)
+      (should (= (length notmuch-multi--schedule-timers) 2))
+      (should (= (length calls) 2))
+      (dolist (c calls)
+        (should (eq (nth 2 c) #'notmuch-multi--get-account-mail))
+        (should (eq (nth 1 (nth 3 c)) t))
+        (should (memq (nth 1 c) '(300 600)))))))
+
+(ert-deftest notmuch-multi-test-schedule-start-staggers-first-fire ()
+  "Numeric first-fire times include the per-account stagger offset."
+  (let ((notmuch-multi--schedule-timers nil)
+        (notmuch-multi--schedule-stagger 7)
+        (notmuch-multi-accounts-saved-searches
+         '((:account (:name "A" :query "*" :get-command "true" :get-interval 300)
+            :searches nil)
+           (:account (:name "B" :query "*" :get-command "true" :get-interval 300)
+            :searches nil)))
+        (firsts '()))
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (first _repeat _fn &rest _) (push first firsts) 'fake)))
+      (notmuch-multi-schedule-start)
+      (should (equal (nreverse firsts) '(300 307))))))
+
+(ert-deftest notmuch-multi-test-schedule-start-skips-ineligible ()
+  "Accounts lacking :get-command or :get-interval are not armed."
+  (let ((notmuch-multi--schedule-timers nil)
+        (notmuch-multi-accounts-saved-searches
+         '((:account (:name "OK" :query "*" :get-command "true" :get-interval 300)
+            :searches nil)
+           (:account (:name "NOINT" :query "*" :get-command "true") :searches nil)
+           (:account (:name "NOCMD" :query "*" :get-interval 300) :searches nil)))
+        (n 0))
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (&rest _) (setq n (1+ n)) 'fake)))
+      (notmuch-multi-schedule-start)
+      (should (= n 1)))))
+
+(ert-deftest notmuch-multi-test-schedule-start-idempotent ()
+  "Re-running `-start' cancels the prior batch; no timer accumulation."
+  (let ((notmuch-multi--schedule-timers nil)
+        (cancelled 0)
+        (notmuch-multi-accounts-saved-searches
+         '((:account (:name "A" :query "*" :get-command "true" :get-interval 300)
+            :searches nil))))
+    (cl-letf (((symbol-function 'run-at-time) (lambda (&rest _) 'fake))
+              ((symbol-function 'cancel-timer)
+               (lambda (_) (setq cancelled (1+ cancelled)))))
+      (notmuch-multi-schedule-start)
+      (should (= (length notmuch-multi--schedule-timers) 1))
+      (notmuch-multi-schedule-start)
+      (should (= (length notmuch-multi--schedule-timers) 1))
+      (should (= cancelled 1)))))
+
+(ert-deftest notmuch-multi-test-schedule-stop-cancels-all ()
+  "`-stop' cancels every timer and clears the list."
+  (let ((notmuch-multi--schedule-timers (list 't1 't2 't3))
+        (cancelled '()))
+    (cl-letf (((symbol-function 'cancel-timer)
+               (lambda (tm) (push tm cancelled))))
+      (notmuch-multi-schedule-stop)
+      (should (null notmuch-multi--schedule-timers))
+      (should (= (length cancelled) 3)))))
+
+(ert-deftest notmuch-multi-test-schedule-stop-empty-noop ()
+  "`-stop' with no timers does nothing and leaves the list nil."
+  (let ((notmuch-multi--schedule-timers nil))
+    (notmuch-multi-schedule-stop)
+    (should (null notmuch-multi--schedule-timers))))
+
+(ert-deftest notmuch-multi-test-schedule-status-not-running ()
+  "`-status' reports not running when no timers are armed."
+  (let ((notmuch-multi--schedule-timers nil))
+    (should (string-match-p "not running" (notmuch-multi-schedule-status)))))
+
+(ert-deftest notmuch-multi-test-schedule-status-lists-accounts ()
+  "`-status' lists schedulable account names and intervals when running."
+  (let ((notmuch-multi--schedule-timers (list 'fake))
+        (notmuch-multi-accounts-saved-searches
+         '((:account (:name "ALPHA" :query "*" :get-command "true" :get-interval 300)
+            :searches nil)
+           (:account (:name "NOCMD" :query "*" :get-interval 300) :searches nil))))
+    (let ((out (notmuch-multi-schedule-status)))
+      (should (string-match-p "ALPHA" out))
+      (should (string-match-p "300" out))
+      (should-not (string-match-p "NOCMD" out)))))
+
+(ert-deftest notmuch-multi-test-refresh-hello-buffers-refreshes-hello ()
+  "`notmuch-multi--refresh-hello-buffers' refreshes a hello-mode buffer."
+  (let ((count 0)
+        (buf (generate-new-buffer "*nm-hello-test*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'notmuch-refresh-this-buffer)
+                   (lambda () (setq count (1+ count)))))
+          (with-current-buffer buf (setq major-mode 'notmuch-hello-mode))
+          (notmuch-multi--refresh-hello-buffers)
+          (should (= count 1)))
+      (kill-buffer buf))))
+
+(ert-deftest notmuch-multi-test-refresh-hello-buffers-skips-others ()
+  "Non-hello buffers are not refreshed."
+  (let ((count 0)
+        (buf (generate-new-buffer "*nm-plain-test*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'notmuch-refresh-this-buffer)
+                   (lambda () (setq count (1+ count)))))
+          ;; buf stays in fundamental-mode
+          (notmuch-multi--refresh-hello-buffers)
+          (should (= count 0)))
+      (kill-buffer buf))))
+
+(ert-deftest notmuch-multi-test-scheduled-refreshes-hello-buffers ()
+  "On a zero exit a scheduled fetch refreshes all hello buffers."
+  (let ((notmuch-multi-index-command "true")
+        (refreshed nil))
+    (cl-letf (((symbol-function 'notmuch-multi--refresh-hello-buffers)
+               (lambda () (setq refreshed t))))
+      (notmuch-multi--get-account-mail '(:name "SOK" :get-command "true") t)
+      (let ((proc (get-process "notmuch-multi-get-SOK")))
+        (should (processp proc))
+        (notmuch-multi-test--wait proc)
+        (should refreshed)))))
+
+(ert-deftest notmuch-multi-test-scheduled-skip-when-running ()
+  "A scheduled fetch is skipped (no new process, no error) when the account
+is already fetching."
+  (let ((notmuch-multi-index-command "true")
+        (made nil)
+        (dummy (start-process "notmuch-multi-get-BUSY" nil "sleep" "2")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'make-process)
+                   (lambda (&rest _) (setq made t) nil)))
+          (notmuch-multi--get-account-mail '(:name "BUSY" :get-command "true") t)
+          (should-not made))
+      (when (process-live-p dummy) (delete-process dummy)))))
+
+(ert-deftest notmuch-multi-test-interactive-errors-when-running ()
+  "Interactively fetching an account already fetching signals a `user-error'."
+  (let ((notmuch-multi-index-command "true")
+        (dummy (start-process "notmuch-multi-get-BUSY2" nil "sleep" "2")))
+    (unwind-protect
+        (should-error
+         (notmuch-multi--get-account-mail '(:name "BUSY2" :get-command "true"))
+         :type 'user-error)
+      (when (process-live-p dummy) (delete-process dummy)))))
+
+(ert-deftest notmuch-multi-test-scheduled-quiet-suppresses-messages ()
+  "With `notmuch-multi-schedule-verbose' nil, a scheduled success is silent."
+  (let ((notmuch-multi-index-command "true")
+        (notmuch-multi-schedule-verbose nil)
+        (msgs '()))
+    (cl-letf (((symbol-function 'notmuch-multi--refresh-hello-buffers)
+               (lambda () nil))
+              ((symbol-function 'message)
+               (lambda (fmt &rest args)
+                 (when fmt (push (apply #'format fmt args) msgs)) nil)))
+      (notmuch-multi--get-account-mail '(:name "QUIET" :get-command "true") t)
+      (let ((proc (get-process "notmuch-multi-get-QUIET")))
+        (notmuch-multi-test--wait proc)
+        (should-not (cl-some (lambda (m) (string-match-p "QUIET" m)) msgs))))))
 
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here

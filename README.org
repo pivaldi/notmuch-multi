@@ -276,5 +276,42 @@ synchronises all accounts), set :
 (setq notmuch-multi-index-command "notmuch new --no-hooks")
 #+end_src
 
+** Scheduling automatic fetches
+Instead of fetching by hand, you can have notmuch-multi poll each account on its
+own timer. Give an account a =:get-interval= (a number of seconds, or any value
+=run-at-time= accepts as REPEAT such as ="5 min"=) in addition to its
+=:get-command= :
+#+begin_src lisp
+(notmuch-multi-accounts-saved-searches-set
+ `((:account (:name "IVALDI.ME" :query "tag:ivaldi.me" :key-prefix "i"
+              :get-command "mbsync --config \"${HOME}/.isyncrc\" -D ivaldi.me"
+              :get-interval 300)            ; every 5 minutes
+    :searches ,pi-notmuch-saved-searches)
+   (:account (:name "OVYA.FR" :query "tag:ovya.fr" :key-prefix "o"
+              :get-command "mbsync --config \"${HOME}/.isyncrc\" -D ovya.fr"
+              :get-interval "10 min")
+    :searches ,pi-notmuch-saved-searches)))
+#+end_src
+
+Then control the scheduler with these commands:
+- =M-x notmuch-multi-schedule-start= arms one repeating timer per account that
+  has both a =:get-command= and a positive =:get-interval=. The first fetch
+  happens one interval later (accounts are staggered slightly). Safe to re-run
+  after changing your accounts.
+- =M-x notmuch-multi-schedule-stop= cancels all the timers.
+- =M-x notmuch-multi-schedule-status= shows which accounts are scheduled.
+
+Each scheduled run uses the same pipeline as =M-g= (=:get-command=, then
+=notmuch-multi-index-command=, then a refresh of every open hello buffer). The
+timers exist only while Emacs is running; this is a convenience, not a
+replacement for an out-of-Emacs cron job.
+
+By default each run reports progress in the echo area. Set
+=notmuch-multi-schedule-verbose= to =nil= to make successful scheduled fetches
+silent (failures are always reported) :
+#+begin_src lisp
+(setq notmuch-multi-schedule-verbose nil)
+#+end_src
+
 * If you appreciate this project
 [[https://buymeacoffee.com/pivaldi][☕ Buy Me a Coffee]]

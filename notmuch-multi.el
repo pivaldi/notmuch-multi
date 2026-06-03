@@ -86,6 +86,17 @@ skip notmuch hooks."
   :type 'string
   :group 'notmuch-multi)
 
+(defcustom notmuch-multi-schedule-verbose t
+  "Whether scheduled fetches report progress in the echo area.
+When non-nil, a timer-driven fetch emits the same \"Fetching…\" and
+\"fetched and indexed\" messages as the interactive
+`notmuch-multi-get-mail-at-point'.  When nil, successful scheduled
+fetches run silently.  Fetch *failures* are always reported regardless
+of this setting.  Has no effect on interactive fetches, which always
+message.  See `notmuch-multi-schedule-start'."
+  :type 'boolean
+  :group 'notmuch-multi)
+
 (define-widget 'notmuch-multi-account-plist 'list
   "An email account.
 
@@ -97,6 +108,10 @@ An account is a plist. Supported properties are
                 \"a <key-prefix> g\" mail-fetch binding, relative to this account.
   :get-command  Optional shell command (string) run to fetch this account's mail
                 via `notmuch-multi-get-mail-at-point' or \"a <key-prefix> g\".
+  :get-interval Optional fetch cadence for the scheduler: a number of seconds, or
+                any value `run-at-time' accepts as REPEAT (e.g. \"5 min\").  An
+                account is auto-fetched only when it has both :get-command and a
+                positive :get-interval.  See `notmuch-multi-schedule-start'.
 "
   :tag "Account Definition"
   :args '((list :inline t
@@ -112,7 +127,10 @@ An account is a plist. Supported properties are
                   (string :format "%v"))
            (group :format "%v" :inline t
                   (const :format "  Get-mail command: " :get-command)
-                  (string :format "%v")))
+                  (string :format "%v"))
+           (group :format "%v" :inline t
+                  (const :format "  Get-mail interval: " :get-interval)
+                  (sexp :format "%v")))
           ))
 
 (define-widget 'notmuch-multi-accounts-saved-searches-plist 'list
@@ -632,37 +650,65 @@ from the preceding character, so the section just above point wins."
       (and (> (point) (point-min))
            (get-text-property (1- (point)) 'notmuch-multi-account))))
 
-(defun notmuch-multi--get-account-mail (account)
-  "Fetch and index mail for ACCOUNT, then refresh this hello buffer.
+(defun notmuch-multi--refresh-hello-buffers ()
+  "Refresh every live `notmuch-hello-mode' buffer.
+Used by scheduled fetches, which have no single \"current\" hello buffer."
+  (dolist (buf (buffer-list))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (when (derived-mode-p 'notmuch-hello-mode)
+          (notmuch-refresh-this-buffer))))))
+
+(defun notmuch-multi--get-account-mail (account &optional scheduled)
+  "Fetch and index mail for ACCOUNT, then refresh hello buffer(s).
 Run ACCOUNT's `:get-command' followed by `notmuch-multi-index-command'
-asynchronously.  On success, refresh the originating hello buffer; on
-failure, show the process output buffer.  See `notmuch-multi-index-command'."
+asynchronously.
+
+When SCHEDULED is nil (the interactive `M-g' / \"a <key-prefix> g\" path):
+refresh the originating hello buffer on success, signal a `user-error' when a
+fetch for ACCOUNT is already running, and always message.
+
+When SCHEDULED is non-nil (timer-driven): refresh all live
+`notmuch-hello-mode' buffers on success, silently skip when a fetch for
+ACCOUNT is already running, and gate progress messages on
+`notmuch-multi-schedule-verbose'.  Never signals.
+
+On failure the process output buffer is shown regardless of SCHEDULED.
+See `notmuch-multi-index-command' and `notmuch-multi-schedule-verbose'."
   (let* ((name (plist-get account :name))
          (cmd (notmuch-multi--get-command account))
          (procname (format "notmuch-multi-get-%s" name))
          (bufname (format "*notmuch-multi-get: %s*" name))
          (full (concat cmd " && " notmuch-multi-index-command))
-         (hello-buf (current-buffer)))
-    (when (process-live-p (get-process procname))
-      (user-error "Already fetching mail for %s" name))
-    (message "Fetching mail for %s…" name)
-    (make-process
-     :name procname
-     :buffer bufname
-     :connection-type 'pipe
-     :command (list shell-file-name shell-command-switch full)
-     :sentinel
-     (lambda (proc _event)
-       (when (memq (process-status proc) '(exit signal))
-         (if (and (eq (process-status proc) 'exit)
-                  (zerop (process-exit-status proc)))
-             (progn
-               (message "%s: fetched and indexed" name)
-               (when (buffer-live-p hello-buf)
-                 (with-current-buffer hello-buf
-                   (notmuch-refresh-this-buffer))))
-           (message "%s: fetch failed (see %s)" name bufname)
-           (display-buffer bufname)))))))
+         (verbose (or (not scheduled) notmuch-multi-schedule-verbose))
+         (refresh (if scheduled
+                      #'notmuch-multi--refresh-hello-buffers
+                    (let ((buf (current-buffer)))
+                      (lambda ()
+                        (when (buffer-live-p buf)
+                          (with-current-buffer buf
+                            (notmuch-refresh-this-buffer))))))))
+    (if (process-live-p (get-process procname))
+        (if scheduled
+            (when verbose
+              (message "%s: previous fetch still running, skipping" name))
+          (user-error "Already fetching mail for %s" name))
+      (when verbose (message "Fetching mail for %s…" name))
+      (make-process
+       :name procname
+       :buffer bufname
+       :connection-type 'pipe
+       :command (list shell-file-name shell-command-switch full)
+       :sentinel
+       (lambda (proc _event)
+         (when (memq (process-status proc) '(exit signal))
+           (if (and (eq (process-status proc) 'exit)
+                    (zerop (process-exit-status proc)))
+               (progn
+                 (when verbose (message "%s: fetched and indexed" name))
+                 (funcall refresh))
+             (message "%s: fetch failed (see %s)" name bufname)
+             (display-buffer bufname))))))))
 
 ;;;###autoload
 (defun notmuch-multi-get-mail-at-point ()
@@ -676,6 +722,88 @@ in `notmuch-hello-mode'.  See `notmuch-multi--get-account-mail'."
     (notmuch-multi--get-account-mail account)))
 
 (define-key notmuch-hello-mode-map (kbd "M-g") #'notmuch-multi-get-mail-at-point)
+
+(defun notmuch-multi--valid-interval-p (iv)
+  "Return non-nil when IV is usable as a `run-at-time' REPEAT value.
+A positive number of seconds, or a non-empty relative-time string."
+  (or (and (numberp iv) (> iv 0))
+      (and (stringp iv) (not (string= iv "")))))
+
+(defun notmuch-multi--schedulable-account-p (account)
+  "Return non-nil when ACCOUNT can be auto-fetched on a timer.
+True when ACCOUNT has a usable `:get-command' (a non-empty string or a
+function) and a valid `:get-interval' (see `notmuch-multi--valid-interval-p').
+Unlike `notmuch-multi--get-command' this never signals, so it is safe for
+filtering."
+  (let ((gc (plist-get account :get-command))
+        (iv (plist-get account :get-interval)))
+    (and (or (functionp gc)
+             (and (stringp gc) (not (string= gc ""))))
+         (notmuch-multi--valid-interval-p iv))))
+
+(defvar notmuch-multi--schedule-stagger 7
+  "Seconds added between successive accounts' first scheduled fire.
+Spreads initial fetches out so their `notmuch new' index steps are less
+likely to run concurrently.  Internal; not a user option.")
+
+(defvar notmuch-multi--schedule-timers nil
+  "List of repeating timers armed by `notmuch-multi-schedule-start'.")
+
+;;;###autoload
+(defun notmuch-multi-schedule-start ()
+  "Arm a repeating fetch timer for each schedulable account.
+Cancel any timers from a previous call first, so this is safe to re-run
+after editing `notmuch-multi-accounts-saved-searches'.  Each timer's first
+fire is one interval out, with accounts staggered by
+`notmuch-multi--schedule-stagger' seconds.  Timers run only while Emacs is
+open.  See `notmuch-multi-schedule-verbose' and
+`notmuch-multi--get-account-mail'."
+  (interactive)
+  (notmuch-multi-schedule-stop)
+  (let ((offset 0)
+        (count 0))
+    (dolist (account-searches notmuch-multi-accounts-saved-searches)
+      (let* ((account (plist-get account-searches :account))
+             (interval (plist-get account :get-interval)))
+        (when (notmuch-multi--schedulable-account-p account)
+          (let ((first (if (numberp interval) (+ interval offset) interval)))
+            (push (run-at-time first interval
+                               #'notmuch-multi--get-account-mail account t)
+                  notmuch-multi--schedule-timers))
+          (setq offset (+ offset notmuch-multi--schedule-stagger))
+          (setq count (1+ count)))))
+    (message "notmuch-multi: scheduled %d account%s"
+             count (if (= count 1) "" "s"))))
+
+;;;###autoload
+(defun notmuch-multi-schedule-stop ()
+  "Cancel all fetch timers armed by `notmuch-multi-schedule-start'."
+  (interactive)
+  (mapc #'cancel-timer notmuch-multi--schedule-timers)
+  (setq notmuch-multi--schedule-timers nil))
+
+;;;###autoload
+(defun notmuch-multi-schedule-status ()
+  "Report which accounts have an armed fetch timer and at what interval.
+The set is recomputed from the current configuration; re-run
+`notmuch-multi-schedule-start' after editing accounts so the armed timers
+and this report stay in sync."
+  (interactive)
+  (let ((msg
+         (if (null notmuch-multi--schedule-timers)
+             "notmuch-multi: scheduler not running"
+           (let (lines)
+             (dolist (account-searches notmuch-multi-accounts-saved-searches)
+               (let ((account (plist-get account-searches :account)))
+                 (when (notmuch-multi--schedulable-account-p account)
+                   (push (format "%s (%s)"
+                                 (plist-get account :name)
+                                 (plist-get account :get-interval))
+                         lines))))
+             (concat "notmuch-multi: fetching "
+                     (mapconcat #'identity (nreverse lines) ", "))))))
+    (message "%s" msg)
+    msg))
 
 ;;;###autoload
 (defun notmuch-multi-delete-mail ()
