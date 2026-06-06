@@ -130,6 +130,25 @@ package and must not be set here.  See `notmuch-multi-address-complete'."
   :type '(repeat string)
   :group 'notmuch-multi)
 
+(defun notmuch-multi--address-query (account prefix)
+  "Build the `notmuch address' argument list for ACCOUNT and typed PREFIX.
+ACCOUNT is an account plist with a non-nil `:address-term'.  PREFIX is the
+recipient token typed so far (may be empty).  Returns the list of string
+arguments to pass after the notmuch program name: \"address\",
+\"--format=sexp\", the flags from `notmuch-multi-address-command-flags',
+and a single combined search-terms argument.  When PREFIX is non-empty,
+the clause from `notmuch-multi-address-prefix-matcher' is parenthesized
+and ANDed (by juxtaposition) with the account's `:address-term'."
+  (let* ((address-term (plist-get account :address-term))
+         (clause (and prefix (not (string= "" prefix))
+                      (funcall notmuch-multi-address-prefix-matcher prefix)))
+         (query (if clause
+                    (format "%s ( %s )" address-term clause)
+                  address-term)))
+    (append '("address" "--format=sexp")
+            notmuch-multi-address-command-flags
+            (list query))))
+
 (define-widget 'notmuch-multi-account-plist 'list
   "An email account.
 

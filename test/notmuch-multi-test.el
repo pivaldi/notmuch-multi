@@ -502,5 +502,35 @@ is already fetching."
   (should (equal (notmuch-multi-address-default-prefix-matcher "natan")
                  "from:\"natan*\" or cc:\"natan*\"")))
 
+;;;; notmuch-multi--address-query (pure)
+
+(ert-deftest notmuch-multi--address-query/with-prefix ()
+  "With a non-empty PREFIX, the query ANDs the address-term with the wrapped clause."
+  (let ((notmuch-multi-address-command-flags '("--output=sender" "--output=count"))
+        (notmuch-multi-address-prefix-matcher
+         #'notmuch-multi-address-default-prefix-matcher)
+        (account '(:name "X" :address-term "to:*@ivaldi.me")))
+    (should (equal (notmuch-multi--address-query account "natan")
+                   '("address" "--format=sexp" "--output=sender" "--output=count"
+                     "to:*@ivaldi.me ( from:\"natan*\" or cc:\"natan*\" )")))))
+
+(ert-deftest notmuch-multi--address-query/empty-prefix ()
+  "An empty PREFIX drops the prefix clause and uses the address-term alone."
+  (let ((notmuch-multi-address-command-flags '("--output=sender"))
+        (notmuch-multi-address-prefix-matcher
+         #'notmuch-multi-address-default-prefix-matcher)
+        (account '(:name "X" :address-term "to:*@ivaldi.me")))
+    (should (equal (notmuch-multi--address-query account "")
+                   '("address" "--format=sexp" "--output=sender" "to:*@ivaldi.me")))))
+
+(ert-deftest notmuch-multi--address-query/custom-matcher ()
+  "A custom prefix matcher is honored and its result is parenthesized."
+  (let ((notmuch-multi-address-command-flags '("--output=sender"))
+        (notmuch-multi-address-prefix-matcher (lambda (p) (format "subject:%s" p)))
+        (account '(:name "X" :address-term "to:*@ivaldi.me")))
+    (should (equal (notmuch-multi--address-query account "natan")
+                   '("address" "--format=sexp" "--output=sender"
+                     "to:*@ivaldi.me ( subject:natan )")))))
+
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here
