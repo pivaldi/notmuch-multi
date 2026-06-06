@@ -5,7 +5,7 @@
 ;; Author: Philippe IVALDI <emacs@ivaldi.me>
 ;; Maintainer: Philippe IVALDI <emacs@ivaldi.me>
 ;; Created: January 09, 2025
-;; Version: 0.0.1
+;; Version: 0.0.2
 ;; Keywords: mail extensions lisp notmuch
 ;; Homepage: https://github.com/pivaldi/notmuch-multi
 ;; Package-Requires: ((emacs "29") (notmuch "0.38.3"))
@@ -164,6 +164,12 @@ An account is a plist. Supported properties are
                 any value `run-at-time' accepts as REPEAT (e.g. \"5 min\").  An
                 account is auto-fetched only when it has both :get-command and a
                 positive :get-interval.  See `notmuch-multi-schedule-start'.
+  :address-term A notmuch query selecting this account's mail, used to scope
+                address completion (see `notmuch-multi-address-complete').
+                notmuch wildcards are trailing-only: use \"to:@ivaldi.me\"
+                (matches all aliases on the domain), not \"to:*@ivaldi.me\".
+  :send-as      A regexp, or list of regexps, matched against the composed
+                From: address to recognize this account when composing.
 "
   :tag "Account Definition"
   :args '((list :inline t
@@ -182,6 +188,12 @@ An account is a plist. Supported properties are
                   (string :format "%v"))
            (group :format "%v" :inline t
                   (const :format "  Get-mail interval: " :get-interval)
+                  (sexp :format "%v"))
+           (group :format "%v" :inline t
+                  (const :format "  Address-term (completion scope): " :address-term)
+                  (string :format "%v"))
+           (group :format "%v" :inline t
+                  (const :format "  Send-as (From: match): " :send-as)
                   (sexp :format "%v")))
           ))
 
@@ -312,7 +324,7 @@ notmuch exits non-zero."
     (let ((status (apply #'call-process notmuch-command nil t nil
                          (notmuch-multi--address-query account prefix))))
       (unless (eq status 0)
-        (error "notmuch address failed (exit %s)" status))
+        (error "Notmuch address failed (exit %s)" status))
       (goto-char (point-min))
       (let ((data (unless (eobp) (read (current-buffer)))))
         (mapcar (lambda (plist) (plist-get plist :name-addr))
@@ -326,7 +338,11 @@ notmuch exits non-zero."
 Return non-nil only when point is within a header matched by the variable
 `notmuch-address-completion-headers-regexp'.  The token runs from after the
 previous comma or the header colon (past leading whitespace) to the next comma
-or end of line (excluding trailing whitespace)."
+or end of line (excluding trailing whitespace).
+An empty or whitespace-only slot yields zero-width bounds at point (BEG = END),
+so completion can offer all of the account's correspondents.
+A comma inside a quoted display name (e.g. \"Doe, John\" <j@x>) is treated as a
+token boundary, matching upstream notmuch address completion."
   (when (let ((mail-abbrev-mode-regexp notmuch-address-completion-headers-regexp))
           (mail-abbrev-in-expansion-header-p))
     (let ((beg (save-excursion
@@ -337,7 +353,56 @@ or end of line (excluding trailing whitespace)."
                  (skip-chars-forward "^,\n")
                  (skip-chars-backward " \t")
                  (point))))
-      (when (<= beg end) (cons beg end)))))
+      (if (<= beg end)
+          (cons beg end)
+        (cons (point) (point))))))
+
+(defun notmuch-multi--address-capf ()
+  "Account-scoped `completion-at-point' function for recipient headers.
+Return nil (so it composes harmlessly) unless both an active account and a
+recipient token are found.  The returned collection keeps the descending-count
+order from `notmuch-multi--address-candidates' by declaring `identity' sort
+functions in its metadata, and appends \", \" after a finished selection."
+  (let ((account (notmuch-multi--address-account))
+        (bounds (notmuch-multi--address-bounds)))
+    (when (and account bounds)
+      (let* ((beg (car bounds))
+             (end (cdr bounds))
+             (prefix (buffer-substring-no-properties beg end))
+             (candidates (notmuch-multi--address-candidates account prefix)))
+        (list beg end
+              (lambda (string pred action)
+                (if (eq action 'metadata)
+                    '(metadata (display-sort-function . identity)
+                      (cycle-sort-function . identity))
+                  (complete-with-action action candidates string pred)))
+              :exclusive 'no
+              :exit-function
+              (lambda (_string status)
+                (when (memq status '(finished sole))
+                  (insert ", "))))))))
+
+;;;###autoload
+(defun notmuch-multi-address-complete ()
+  "Complete the recipient at point using the active account's addresses.
+The active account is the one whose `:send-as' matches the message From:
+header (see `notmuch-multi--address-account').  Candidates come from
+`notmuch address' scoped by the account's `:address-term', ordered by
+descending message count -- account-scoped, unlike notmuch's native global
+completion.  When point is outside a recipient header or no account matches,
+report and do nothing."
+  (interactive)
+  (cond
+   ((not (notmuch-multi--address-bounds))
+    (message "Not in a recipient header"))
+   ((not (notmuch-multi--address-account))
+    (message "No notmuch-multi account matches From:; use <TAB> for global completion"))
+   (t
+    (let ((completion-ignore-case t)
+          (completion-at-point-functions (list #'notmuch-multi--address-capf)))
+      (completion-at-point)))))
+
+(define-key notmuch-message-mode-map (kbd "C-c TAB") #'notmuch-multi-address-complete)
 
 (defface notmuch-multi-hello-header-face
   '((t :foreground "white"
