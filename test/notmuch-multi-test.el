@@ -574,5 +574,41 @@ is already fetching."
                (lambda (&rest _) "Phil <p22@ivaldi.me>")))
       (should-not (notmuch-multi--address-account)))))
 
+(ert-deftest notmuch-multi--address-candidates/sorted-desc-by-count ()
+  "Candidates are parsed from sexp output and ordered by :count descending."
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (_program &optional _infile _buffer _display &rest _args)
+               (insert "((:name \"A\" :address \"a@x\" :name-addr \"A <a@x>\" :count 2)"
+                       " (:name \"B\" :address \"b@x\" :name-addr \"B <b@x>\" :count 9)"
+                       " (:name \"C\" :address \"c@x\" :name-addr \"C <c@x>\" :count 5))")
+               0)))
+    (should (equal (notmuch-multi--address-candidates
+                    '(:name "X" :address-term "to:*@x") "")
+                   '("B <b@x>" "C <c@x>" "A <a@x>")))))
+
+(ert-deftest notmuch-multi--address-candidates/empty-output ()
+  "Empty notmuch output yields an empty candidate list."
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (_program &optional _infile _buffer _display &rest _args)
+               (insert "()")
+               0)))
+    (should (equal (notmuch-multi--address-candidates
+                    '(:name "X" :address-term "to:*@x") "natan")
+                   nil))))
+
+(ert-deftest notmuch-multi--address-candidates/nonzero-exit-errors ()
+  "A non-zero notmuch exit signals an error rather than returning garbage."
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (_program &optional _infile _buffer _display &rest _args) 1)))
+    (should-error (notmuch-multi--address-candidates
+                   '(:name "X" :address-term "to:*@x") "natan"))))
+
+(ert-deftest notmuch-multi--address-candidates/truly-empty-buffer ()
+  "Exit-0 with no output at all yields nil rather than an EOF error."
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (_program &optional _infile _buffer _display &rest _args) 0)))
+    (should (null (notmuch-multi--address-candidates
+                   '(:name "X" :address-term "to:*@x") "")))))
+
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here
