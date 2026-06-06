@@ -321,6 +321,24 @@ notmuch exits non-zero."
                         (> (or (plist-get a :count) 0)
                            (or (plist-get b :count) 0)))))))))
 
+(defun notmuch-multi--address-bounds ()
+  "Return (BEG . END) bounding the recipient token at point, or nil.
+Return non-nil only when point is within a header matched by the variable
+`notmuch-address-completion-headers-regexp'.  The token runs from after the
+previous comma or the header colon (past leading whitespace) to the next comma
+or end of line (excluding trailing whitespace)."
+  (when (let ((mail-abbrev-mode-regexp notmuch-address-completion-headers-regexp))
+          (mail-abbrev-in-expansion-header-p))
+    (let ((beg (save-excursion
+                 (skip-chars-backward "^:,\n")
+                 (skip-chars-forward " \t")
+                 (point)))
+          (end (save-excursion
+                 (skip-chars-forward "^,\n")
+                 (skip-chars-backward " \t")
+                 (point))))
+      (when (<= beg end) (cons beg end)))))
+
 (defface notmuch-multi-hello-header-face
   '((t :foreground "white"
      :background "blue"
