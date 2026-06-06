@@ -610,5 +610,25 @@ is already fetching."
     (should (null (notmuch-multi--address-candidates
                    '(:name "X" :address-term "to:*@x") "")))))
 
+(ert-deftest notmuch-multi--address-bounds/in-recipient-header ()
+  "Inside a recipient header, bounds isolate the token after the last comma."
+  (with-temp-buffer
+    (insert "To: Alice <a@x>, nat")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
+               (lambda () t)))
+      (let ((b (notmuch-multi--address-bounds)))
+        (should b)
+        (should (equal (buffer-substring-no-properties (car b) (cdr b)) "nat"))))))
+
+(ert-deftest notmuch-multi--address-bounds/not-in-recipient-header ()
+  "Outside a recipient header, bounds are nil."
+  (with-temp-buffer
+    (insert "some body text")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
+               (lambda () nil)))
+      (should-not (notmuch-multi--address-bounds)))))
+
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here
