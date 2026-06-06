@@ -532,5 +532,47 @@ is already fetching."
                    '("address" "--format=sexp" "--output=sender"
                      "to:*@ivaldi.me ( subject:natan )")))))
 
+;;;; notmuch-multi--send-as-match-p (pure)
+
+(ert-deftest notmuch-multi--send-as-match-p/regexp ()
+  "A single regexp matches the address."
+  (should (notmuch-multi--send-as-match-p "@ivaldi\\.me\\'" "p22@ivaldi.me"))
+  (should-not (notmuch-multi--send-as-match-p "@ivaldi\\.me\\'" "x@example.com")))
+
+(ert-deftest notmuch-multi--send-as-match-p/list ()
+  "A list matches when any element matches; nil never matches."
+  (should (notmuch-multi--send-as-match-p '("@work\\.com\\'" "@ivaldi\\.me\\'")
+                                          "p22@ivaldi.me"))
+  (should-not (notmuch-multi--send-as-match-p '("@work\\.com\\'") "p22@ivaldi.me"))
+  (should-not (notmuch-multi--send-as-match-p nil "p22@ivaldi.me")))
+
+(ert-deftest notmuch-multi--address-account/matches-from ()
+  "The account whose :send-as matches the From: address is returned."
+  (let ((notmuch-multi-accounts-saved-searches
+         '((:account (:name "WORK" :address-term "to:*@work.com"
+                      :send-as "@work\\.com\\'"))
+           (:account (:name "IVALDI" :address-term "to:*@ivaldi.me"
+                      :send-as "@ivaldi\\.me\\'")))))
+    (cl-letf (((symbol-function 'message-field-value)
+               (lambda (&rest _) "Phil <p22@ivaldi.me>")))
+      (should (equal (plist-get (notmuch-multi--address-account) :name) "IVALDI")))))
+
+(ert-deftest notmuch-multi--address-account/no-match ()
+  "No matching :send-as yields nil."
+  (let ((notmuch-multi-accounts-saved-searches
+         '((:account (:name "WORK" :address-term "to:*@work.com"
+                      :send-as "@work\\.com\\'")))))
+    (cl-letf (((symbol-function 'message-field-value)
+               (lambda (&rest _) "Phil <p22@ivaldi.me>")))
+      (should-not (notmuch-multi--address-account)))))
+
+(ert-deftest notmuch-multi--address-account/skips-without-address-term ()
+  "An account without :address-term never matches even if :send-as would."
+  (let ((notmuch-multi-accounts-saved-searches
+         '((:account (:name "IVALDI" :send-as "@ivaldi\\.me\\'")))))
+    (cl-letf (((symbol-function 'message-field-value)
+               (lambda (&rest _) "Phil <p22@ivaldi.me>")))
+      (should-not (notmuch-multi--address-account)))))
+
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here

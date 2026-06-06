@@ -270,6 +270,38 @@ Supported properties of the plist are :
          (notmuch-multi-accounts-saved-searches-set value))
   :group 'notmuch-multi)
 
+(defun notmuch-multi--send-as-match-p (send-as addr)
+  "Return non-nil when ADDR matches SEND-AS.
+SEND-AS is a regexp, a list of regexps (matches if any element matches), or
+nil (never matches)."
+  (cond
+   ((null send-as) nil)
+   ((listp send-as)
+    (let ((match nil))
+      (dolist (re send-as)
+        (when (and (not match) (string-match-p re addr))
+          (setq match t)))
+      match))
+   (t (and (string-match-p send-as addr) t))))
+
+(defun notmuch-multi--address-account ()
+  "Return the account plist whose `:send-as' matches the composed From:, or nil.
+Read the From: header of the current message buffer, take the bare address,
+and return the first account in `notmuch-multi-accounts-saved-searches' that
+defines both `:address-term' and a matching `:send-as'."
+  (let* ((from (message-field-value "from"))
+         (addr (and from (cadr (mail-extract-address-components from))))
+         (found nil))
+    (when addr
+      (dolist (account-searches notmuch-multi-accounts-saved-searches)
+        (let ((account (plist-get account-searches :account)))
+          (when (and (not found)
+                     (plist-get account :address-term)
+                     (notmuch-multi--send-as-match-p
+                      (plist-get account :send-as) addr))
+            (setq found account)))))
+    found))
+
 (defface notmuch-multi-hello-header-face
   '((t :foreground "white"
      :background "blue"
