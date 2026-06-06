@@ -1,18 +1,14 @@
 #+title: Notmuch-Multi
 
-This package provide some extra features and configurations of the default
-[[https://notmuchmail.org/][Notmuch]] Emacs UI with particular effort handling
-multiple mail accounts.
+This package provide some extra features and configurations of the default [[https://notmuchmail.org/][Notmuch]] Emacs UI with particular effort handling multiple mail accounts.
 
 * Features
-Notmuch Emacs UI does not organize by default multiple accounts separately like Gnus does for
-example…
+Notmuch Emacs UI does not organize by default multiple accounts separately like Gnus does for example…
 
 This package allows
-- To configure and show separately multiple mail accounts through one variable ;
+- To configure and show separately multiple mail accounts through one variable.
 - Configure the default Notmuch Key binding "j" so that it allows to select one account by
-  a corresponding account prefix and next the corresponding key tag relatively
-  to this account.
+  a corresponding account prefix and next the corresponding key tag relatively to this account.
 - More configured features are explained in [[https://github.com/pivaldi/pi-notmuch][my personal configuration of PIMacs/notmuch]]
 
 * Screenshots
@@ -124,15 +120,12 @@ The Doom Emacs syntax with ~which-key~ documentation :
      :desc "Tag as spam or untag is prefixed. #pim" "C-t s" #'notmuch-multi-show-spam-message
      )
 #+end_src
+
 * Configuration
 
-[[https://github.com/pivaldi/pi-notmuch][Here]] is my
-personal configuration of Notmuch-Multi with Doom Emacs
-in conjunction with [[https://github.com/pivaldi/pimacs/notmuch][PIMacs/notmuch]].
+[[https://github.com/pivaldi/pi-notmuch][Here]] is my personal configuration of Notmuch-Multi with Doom Emacs in conjunction with [[https://github.com/pivaldi/pimacs/notmuch][PIMacs/notmuch]].
 
-The main widget provided by this package is
-~notmuch-multi-hello-insert-accounts-searches~ to be added to
-~notmuch-hello-sections~.
+The main widget provided by this package is ~notmuch-multi-hello-insert-accounts-searches~ to be added to ~notmuch-hello-sections~.
 Here the ~notmuch-hello-sections~ used to generate the screenshots :
 #+begin_src lisp
 (setq
@@ -146,8 +139,7 @@ Here the ~notmuch-hello-sections~ used to generate the screenshots :
     ))
 #+end_src
 
-In the screenshots I use this accounts configurations using the function
-~notmuch-multi-accounts-saved-searches-set~ :
+In the screenshots I use this accounts configurations using the function ~notmuch-multi-accounts-saved-searches-set~ :
 #+begin_src lisp
 (setq
    notmuch-saved-searches nil
@@ -312,6 +304,50 @@ silent (failures are always reported) :
 #+begin_src lisp
 (setq notmuch-multi-schedule-verbose nil)
 #+end_src
+
+* Per-account address completion
+
+Notmuch's native address completion (=<TAB>= in a recipient header) is global.\\
+~notmuch-multi~ adds an account-scoped completion command bound to =C-c TAB= in
+message buffers: it completes the recipient at point using only addresses drawn
+from the active account's mail, ordered by how often you have corresponded.
+
+The active account is the one whose =:send-as= regexp matches the message =From:=
+header. Candidates are harvested with =notmuch address= scoped by the account's
+=:address-term= query, so aliases are handled by one query that matches them all.
+
+Add two properties to the account plist :
+#+begin_src lisp
+(:account (:name "IVALDI"
+           :query "*"
+           :address-term "to:@ivaldi.me"   ; scopes the candidate search
+           :send-as "@ivaldi\\.me\\'")      ; matches your From: when composing
+ :searches ...)
+#+end_src
+
+=:address-term= is an ordinary notmuch query. notmuch wildcards are TRAILING-ONLY,
+so match a whole domain (and all its aliases) with =to:@ivaldi.me= — a LEADING =*=
+such as =to:*@ivaldi.me= matches nothing and silently disables completion.
+
+=:send-as= is an Emacs regexp (or a list of them) matched against your composed
+=From:= address; the =\'= anchors it to the end so only the exact domain matches.
+
+On an empty recipient (or right after a comma) =C-c TAB= offers all of the account's correspondents (ordered by frequency).
+
+** Customization
+
+- ~notmuch-multi-address-command-flags~ — =notmuch address= output flags
+  (defaults: =--output=sender=, =--output=recipients=, =--output=count=,
+  =--deduplicate=address=); drop =--output=recipients= to restrict to senders.
+- ~notmuch-multi-address-prefix-matcher~ — function turning the typed prefix into
+  a query clause (default: =from:"PREFIX*"= or =cc:"PREFIX*"=).
+
+To rebind the key :
+#+begin_src lisp
+(define-key notmuch-message-mode-map (kbd "C-c C-a") #'notmuch-multi-address-complete)
+#+end_src
+
+Notmuch's native global completion on =<TAB>= is unchanged and remains available.
 
 * If you appreciate this project
 [[https://buymeacoffee.com/pivaldi][☕ Buy Me a Coffee]]

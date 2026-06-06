@@ -509,28 +509,28 @@ is already fetching."
   (let ((notmuch-multi-address-command-flags '("--output=sender" "--output=count"))
         (notmuch-multi-address-prefix-matcher
          #'notmuch-multi-address-default-prefix-matcher)
-        (account '(:name "X" :address-term "to:*@ivaldi.me")))
+        (account '(:name "X" :address-term "to:@ivaldi.me")))
     (should (equal (notmuch-multi--address-query account "natan")
                    '("address" "--format=sexp" "--output=sender" "--output=count"
-                     "to:*@ivaldi.me ( from:\"natan*\" or cc:\"natan*\" )")))))
+                     "to:@ivaldi.me ( from:\"natan*\" or cc:\"natan*\" )")))))
 
 (ert-deftest notmuch-multi--address-query/empty-prefix ()
   "An empty PREFIX drops the prefix clause and uses the address-term alone."
   (let ((notmuch-multi-address-command-flags '("--output=sender"))
         (notmuch-multi-address-prefix-matcher
          #'notmuch-multi-address-default-prefix-matcher)
-        (account '(:name "X" :address-term "to:*@ivaldi.me")))
+        (account '(:name "X" :address-term "to:@ivaldi.me")))
     (should (equal (notmuch-multi--address-query account "")
-                   '("address" "--format=sexp" "--output=sender" "to:*@ivaldi.me")))))
+                   '("address" "--format=sexp" "--output=sender" "to:@ivaldi.me")))))
 
 (ert-deftest notmuch-multi--address-query/custom-matcher ()
   "A custom prefix matcher is honored and its result is parenthesized."
   (let ((notmuch-multi-address-command-flags '("--output=sender"))
         (notmuch-multi-address-prefix-matcher (lambda (p) (format "subject:%s" p)))
-        (account '(:name "X" :address-term "to:*@ivaldi.me")))
+        (account '(:name "X" :address-term "to:@ivaldi.me")))
     (should (equal (notmuch-multi--address-query account "natan")
                    '("address" "--format=sexp" "--output=sender"
-                     "to:*@ivaldi.me ( subject:natan )")))))
+                     "to:@ivaldi.me ( subject:natan )")))))
 
 ;;;; notmuch-multi--send-as-match-p (pure)
 
@@ -549,9 +549,9 @@ is already fetching."
 (ert-deftest notmuch-multi--address-account/matches-from ()
   "The account whose :send-as matches the From: address is returned."
   (let ((notmuch-multi-accounts-saved-searches
-         '((:account (:name "WORK" :address-term "to:*@work.com"
+         '((:account (:name "WORK" :address-term "to:@work.com"
                       :send-as "@work\\.com\\'"))
-           (:account (:name "IVALDI" :address-term "to:*@ivaldi.me"
+           (:account (:name "IVALDI" :address-term "to:@ivaldi.me"
                       :send-as "@ivaldi\\.me\\'")))))
     (cl-letf (((symbol-function 'message-field-value)
                (lambda (&rest _) "Phil <p22@ivaldi.me>")))
@@ -560,7 +560,7 @@ is already fetching."
 (ert-deftest notmuch-multi--address-account/no-match ()
   "No matching :send-as yields nil."
   (let ((notmuch-multi-accounts-saved-searches
-         '((:account (:name "WORK" :address-term "to:*@work.com"
+         '((:account (:name "WORK" :address-term "to:@work.com"
                       :send-as "@work\\.com\\'")))))
     (cl-letf (((symbol-function 'message-field-value)
                (lambda (&rest _) "Phil <p22@ivaldi.me>")))
@@ -583,7 +583,7 @@ is already fetching."
                        " (:name \"C\" :address \"c@x\" :name-addr \"C <c@x>\" :count 5))")
                0)))
     (should (equal (notmuch-multi--address-candidates
-                    '(:name "X" :address-term "to:*@x") "")
+                    '(:name "X" :address-term "to:@x") "")
                    '("B <b@x>" "C <c@x>" "A <a@x>")))))
 
 (ert-deftest notmuch-multi--address-candidates/empty-output ()
@@ -593,7 +593,7 @@ is already fetching."
                (insert "()")
                0)))
     (should (equal (notmuch-multi--address-candidates
-                    '(:name "X" :address-term "to:*@x") "natan")
+                    '(:name "X" :address-term "to:@x") "natan")
                    nil))))
 
 (ert-deftest notmuch-multi--address-candidates/nonzero-exit-errors ()
@@ -601,14 +601,14 @@ is already fetching."
   (cl-letf (((symbol-function 'call-process)
              (lambda (_program &optional _infile _buffer _display &rest _args) 1)))
     (should-error (notmuch-multi--address-candidates
-                   '(:name "X" :address-term "to:*@x") "natan"))))
+                   '(:name "X" :address-term "to:@x") "natan"))))
 
 (ert-deftest notmuch-multi--address-candidates/truly-empty-buffer ()
   "Exit-0 with no output at all yields nil rather than an EOF error."
   (cl-letf (((symbol-function 'call-process)
              (lambda (_program &optional _infile _buffer _display &rest _args) 0)))
     (should (null (notmuch-multi--address-candidates
-                   '(:name "X" :address-term "to:*@x") "")))))
+                   '(:name "X" :address-term "to:@x") "")))))
 
 (ert-deftest notmuch-multi--address-bounds/in-recipient-header ()
   "Inside a recipient header, bounds isolate the token after the last comma."
@@ -629,6 +629,48 @@ is already fetching."
     (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
                (lambda () nil)))
       (should-not (notmuch-multi--address-bounds)))))
+
+(ert-deftest notmuch-multi--address-bounds/mid-token ()
+  "Bounds cover the whole token even when point is inside it."
+  (with-temp-buffer
+    (insert "To: Alice <a@x>, native")
+    (goto-char (- (point-max) 3))
+    (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
+               (lambda () t)))
+      (let ((b (notmuch-multi--address-bounds)))
+        (should (equal (buffer-substring-no-properties (car b) (cdr b)) "native"))))))
+
+(ert-deftest notmuch-multi--address-bounds/whitespace-only-slot ()
+  "An empty slot after a comma yields zero-width bounds at point (offer all)."
+  (with-temp-buffer
+    (insert "To: alice, ")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
+               (lambda () t)))
+      (let ((b (notmuch-multi--address-bounds)))
+        (should b)
+        (should (= (car b) (cdr b) (point-max)))))))
+
+(ert-deftest notmuch-multi--address-bounds/empty-header ()
+  "An empty recipient header yields zero-width bounds at point (offer all)."
+  (with-temp-buffer
+    (insert "To: ")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
+               (lambda () t)))
+      (let ((b (notmuch-multi--address-bounds)))
+        (should b)
+        (should (= (car b) (cdr b) (point-max)))))))
+
+(ert-deftest notmuch-multi--address-bounds/first-token-after-colon ()
+  "The first token (no preceding comma) is bounded from after the colon."
+  (with-temp-buffer
+    (insert "To: alice")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'mail-abbrev-in-expansion-header-p)
+               (lambda () t)))
+      (let ((b (notmuch-multi--address-bounds)))
+        (should (equal (buffer-substring-no-properties (car b) (cdr b)) "alice"))))))
 
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here
