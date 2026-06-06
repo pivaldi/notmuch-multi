@@ -495,5 +495,12 @@ is already fetching."
         (notmuch-multi-test--wait proc)
         (should-not (cl-some (lambda (m) (string-match-p "QUIET" m)) msgs))))))
 
+;;;; notmuch-multi-address-default-prefix-matcher (pure)
+
+(ert-deftest notmuch-multi-address-default-prefix-matcher/from-and-cc ()
+  "The default matcher matches PREFIX against From and Cc with a wildcard."
+  (should (equal (notmuch-multi-address-default-prefix-matcher "natan")
+                 "from:\"natan*\" or cc:\"natan*\"")))
+
 (provide 'notmuch-multi-test)
 ;;; notmuch-multi-test.el ends here
