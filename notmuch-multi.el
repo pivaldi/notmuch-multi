@@ -22,6 +22,10 @@
 
 (require 'notmuch)
 (require 'notmuch-hello)
+(require 'notmuch-address)
+(require 'notmuch-mua)
+(require 'mailabbrev)
+(require 'mail-extr)
 
 (defgroup notmuch-multi ()
   "Extensions for notmuch.el."
@@ -95,6 +99,35 @@ fetches run silently.  Fetch *failures* are always reported regardless
 of this setting.  Has no effect on interactive fetches, which always
 message.  See `notmuch-multi-schedule-start'."
   :type 'boolean
+  :group 'notmuch-multi)
+
+(defun notmuch-multi-address-default-prefix-matcher (prefix)
+  "Return the default notmuch query clause matching PREFIX in From or Cc.
+PREFIX is the text typed in the recipient header.  The clause is wrapped in
+parentheses by the caller (`notmuch-multi--address-query'), so it returns the
+bare disjunction."
+  (format "from:\"%s*\" or cc:\"%s*\"" prefix prefix))
+
+(defcustom notmuch-multi-address-prefix-matcher
+  #'notmuch-multi-address-default-prefix-matcher
+  "Function building the notmuch query clause that filters candidates by PREFIX.
+Called with the typed PREFIX string; must return a notmuch query string.  The
+default, `notmuch-multi-address-default-prefix-matcher', returns
+\"from:\\\"PREFIX*\\\" or cc:\\\"PREFIX*\\\"\".  See
+`notmuch-multi-address-complete'."
+  :type 'function
+  :group 'notmuch-multi)
+
+(defcustom notmuch-multi-address-command-flags
+  '("--output=sender" "--output=recipients" "--output=count" "--deduplicate=address")
+  "Flags passed to `notmuch address' when harvesting completion candidates.
+Both `--output=sender' and `--output=recipients' are included by default,
+so candidates come from the From and the To/Cc/Bcc headers of matching
+messages; remove `--output=recipients' to restrict candidates to senders.
+`--output=count' makes notmuch report a per-address message count, used
+to order candidates (descending).  `--format=sexp' is always added by the
+package and must not be set here.  See `notmuch-multi-address-complete'."
+  :type '(repeat string)
   :group 'notmuch-multi)
 
 (define-widget 'notmuch-multi-account-plist 'list
