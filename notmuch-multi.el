@@ -302,6 +302,25 @@ defines both `:address-term' and a matching `:send-as'."
             (setq found account)))))
     found))
 
+(defun notmuch-multi--address-candidates (account prefix)
+  "Return ACCOUNT's address candidates for typed PREFIX, ordered by frequency.
+Run `notmuch address' (see `notmuch-multi--address-query') synchronously, read
+its `--format=sexp' output (a list of address plists), sort the plists by
+`:count' descending, and return the `:name-addr' strings.  Signal an error when
+notmuch exits non-zero."
+  (with-temp-buffer
+    (let ((status (apply #'call-process notmuch-command nil t nil
+                         (notmuch-multi--address-query account prefix))))
+      (unless (eq status 0)
+        (error "notmuch address failed (exit %s)" status))
+      (goto-char (point-min))
+      (let ((data (unless (eobp) (read (current-buffer)))))
+        (mapcar (lambda (plist) (plist-get plist :name-addr))
+                (sort (copy-sequence data)
+                      (lambda (a b)
+                        (> (or (plist-get a :count) 0)
+                           (or (plist-get b :count) 0)))))))))
+
 (defface notmuch-multi-hello-header-face
   '((t :foreground "white"
      :background "blue"
