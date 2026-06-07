@@ -105,8 +105,12 @@ message.  See `notmuch-multi-schedule-start'."
   "Return the default notmuch query clause matching PREFIX in From or Cc.
 PREFIX is the text typed in the recipient header.  The clause is wrapped in
 parentheses by the caller (`notmuch-multi--address-query'), so it returns the
-bare disjunction."
-  (format "from:\"%s*\" or cc:\"%s*\"" prefix prefix))
+bare disjunction.  Double quotes are stripped from PREFIX first: it is
+interpolated into a quoted notmuch phrase (\"PREFIX*\"), so an embedded quote
+\(e.g. from a half-typed display name) would otherwise produce a malformed
+query."
+  (let ((prefix (replace-regexp-in-string "\"" "" prefix)))
+    (format "from:\"%s*\" or cc:\"%s*\"" prefix prefix)))
 
 (defcustom notmuch-multi-address-prefix-matcher
   #'notmuch-multi-address-default-prefix-matcher
