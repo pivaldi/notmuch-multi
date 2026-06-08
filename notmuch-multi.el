@@ -1,16 +1,29 @@
-;;; notmuch-multi.el --- Prettified Emacs Notmuch UI For Multiple Accounts -*- lexical-binding: t; -*-
+;;; notmuch-multi.el --- Prettified Notmuch UI For Multiple Accounts -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2025 Philippe IVALDI
 ;;
 ;; Author: Philippe IVALDI <emacs@ivaldi.me>
 ;; Maintainer: Philippe IVALDI <emacs@ivaldi.me>
 ;; Created: January 09, 2025
-;; Version: 0.0.2
-;; Keywords: mail extensions lisp notmuch
+;; Version: 0.2.0
+;; Keywords: mail notmuch
 ;; Homepage: https://github.com/pivaldi/notmuch-multi
 ;; Package-Requires: ((emacs "29") (notmuch "0.38.3"))
 ;;
 ;; This file is not part of GNU Emacs.
+;;
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ;;
 ;;; Commentary:
 ;;
@@ -232,9 +245,9 @@ are removed when accounts are reconfigured.")
 
 ;;;###autoload
 (defun notmuch-multi-accounts-saved-searches-set (accounts-searches)
-  "Setter of `notmuch-multi-accounts-saved-searches'.
-Push the searches from accounts into `notmuch-saved-searches'
-with computed nane, key and query.
+  "Set `notmuch-multi-accounts-saved-searches' to ACCOUNTS-SEARCHES.
+Push the searches from each account in ACCOUNTS-SEARCHES into
+`notmuch-saved-searches' with computed name, key and query.
 
 Also (re)install the per-account \"a <key-prefix> g\" mail-fetch bindings in
 `notmuch-hello-mode-map' for accounts that define a non-empty `:key-prefix'.
@@ -277,8 +290,7 @@ The saved accounts searches is a list of plist.
 Supported properties of the plist are :
 
   :account         A `notmuch-multi-account-plist (required)'.
-  :searches        A `notmuch-saved-searches' (required).
-"
+  :searches        A `notmuch-saved-searches' (required)."
   :type '(repeat :tag "Account" notmuch-multi-accounts-saved-searches-plist)
   :tag "List of Accounts"
   :set (lambda (symbol value)
@@ -424,6 +436,10 @@ See `notmuch-multi-hello-insert-buttons`."
   :group 'notmuch-faces)
 
 (defun notmuch-multi--notmuch-remove-untags (tags)
+  "Return the elements of TAGS that do not begin with a minus sign.
+These are the tag additions (e.g. \"+delete\"); removal tags such as
+\"-inbox\" are dropped.  Used to reverse a tagging operation by keeping
+only the tags it would add."
   (let ((rmtags '()))
     (mapc
      (lambda (str)
@@ -620,8 +636,11 @@ reverse the application of the tags."
 
 
 (defun notmuch-multi-hello-query-insert (cnt query elem)
-  "Create a notmuch query widget.
-Source : https://holgerschurig.github.io/en/emacs-notmuch-hello/"
+  "Insert a button widget showing count CNT for saved search ELEM.
+CNT is the message count to display (when nil, blank padding is inserted
+instead); QUERY is the search the button runs when pushed; ELEM is the
+saved-search plist, read for its `:sort-order'.
+Source: https://holgerschurig.github.io/en/emacs-notmuch-hello/"
   (if cnt
       (let* ((str (format "%s" cnt))
              (widget-push-button-prefix "")
@@ -640,7 +659,11 @@ Source : https://holgerschurig.github.io/en/emacs-notmuch-hello/"
     (widget-insert "        ")))
 
 (defun notmuch-multi-hello-query-counts (query-list &rest options)
-  "Modified version of `notmuch-hello-query-counts' to add unread the property :unread:count."
+  "Return one plist per saved search in QUERY-LIST, each carrying its counts.
+Modified version of `notmuch-hello-query-counts' that adds an
+`:unread-count' property alongside the usual `:count'.  OPTIONS are the
+same keyword options accepted by the original (e.g. `:filter',
+`:show-empty-searches', `:disable-excludes')."
   (with-temp-buffer
     (dolist (elem query-list nil)
       (let* ((count-query (or (notmuch-saved-search-get elem :count-query)
@@ -661,7 +684,7 @@ Source : https://holgerschurig.github.io/en/emacs-notmuch-hello/"
                                                "--exclude=true")
                                              "--batch") 0)
       (notmuch-logged-error
-       "notmuch count --batch failed"
+       "Notmuch count --batch failed"
        "Please check that the notmuch CLI is new enough to support `count
 --batch'. In general we recommend running matching versions of
 the CLI and emacs interface."))
@@ -744,8 +767,7 @@ with `notmuch-multi-hello-query-counts'."
       (widget-insert "\n"))))
 
 (defun notmuch-multi-hello-insert-searches (title query-list &rest options)
-  "Insert a section with TITLE showing a list of buttons made from
-QUERY-LIST.
+  "Insert a section with TITLE showing buttons made from QUERY-LIST.
 
 QUERY-LIST should ideally be a plist but for backwards
 compatibility other forms are also accepted (see
@@ -762,10 +784,10 @@ Supports the following entries in OPTIONS as a plist:
 :filter - This can be a function that takes the search query as
    its argument and returns a filter to be used in conjunction
    with the query for that search or nil to hide the
-   element. This can also be a string that is used as a combined
+   element.  This can also be a string that is used as a combined
    with each query using \"and\".
 :filter-count - Separate filter to generate the count displayed
-   each search. Accepts the same values as :filter. If :filter
+   each search.  Accepts the same values as :filter.  If :filter
    and :filter-count are specified, this will be used instead of
    :filter, not in conjunction with it."
 
@@ -795,7 +817,7 @@ Supports the following entries in OPTIONS as a plist:
           (notmuch-multi-hello-insert-buttons searches))))))
 
 (defun notmuch-multi-hello-insert-account-searches (account-searches)
-  "Insert a section of account associated with saved-searches.
+  "Insert a section pairing the account in ACCOUNT-SEARCHES with its search list.
 
 Stamp the inserted region with the `notmuch-multi-account' text property
 so `notmuch-multi-get-mail-at-point' can recover the account at point.
@@ -1029,8 +1051,9 @@ See `notmuch-multi-delete-expirable-mail' and `notmuch-multi-delete-mail'."
 
 ;;;###autoload
 (defun notmuch-multi-count-query (query)
-  "Simplified version of `notmuch-hello-query-counts'.
-Usage : (notmuch-multi-count-query \"folder:here and tag:unread\")"
+  "Return and echo the number of messages matching QUERY.
+Simplified version of `notmuch-hello-query-counts'.
+Usage: (notmuch-multi-count-query \"folder:here and tag:unread\")"
   (interactive "sQuery: ")
   (let ((count (string-to-number
                 (with-temp-buffer
@@ -1097,6 +1120,10 @@ Inspiration : https://github.com/magnars/s.el"
         (concat shorted elid)))))
 
 (defun notmuch-multi--get-subject (msg)
+  "Return MSG's subject with emoji stripped and truncated with an ellipsis.
+MSG is a notmuch message plist; its subject is read from `:subject' (or
+the `:Subject' header), cleaned with `notmuch-multi-strip-emoji' and
+`notmuch-show-strip-re', then shortened by `notmuch-multi--ellipsid'."
   (let* ((subject (string-trim
                    (notmuch-multi-strip-emoji
                     (notmuch-show-strip-re
@@ -1106,6 +1133,10 @@ Inspiration : https://github.com/magnars/s.el"
 
 ;;;###autoload
 (defun notmuch-multi-tree-format-subject (format-string msg)
+  "Render MSG's subject through FORMAT-STRING for `notmuch-tree-result-format'.
+FORMAT-STRING is the subject column's format spec and MSG is the notmuch
+message plist.  The subject is cleaned by `notmuch-multi--get-subject'
+and faced according to its read or unread state."
   (let* ((tags (plist-get msg :tags ))
          (unread? (member "unread" tags))
          (subject (format format-string (notmuch-multi--get-subject msg)))
@@ -1116,6 +1147,10 @@ Inspiration : https://github.com/magnars/s.el"
 
 ;;;###autoload
 (defun notmuch-multi-search-format-subject (format-string msg)
+  "Render MSG's subject through FORMAT-STRING for `notmuch-search-result-format'.
+FORMAT-STRING is the subject column's format spec and MSG is the notmuch
+message plist.  The subject is cleaned by `notmuch-multi--get-subject'
+and faced according to its match state."
   (let* ((match? (plist-get msg :match))
          (subject (format format-string (notmuch-multi--get-subject msg)))
          (face (if match?
