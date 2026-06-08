@@ -239,22 +239,12 @@ Modified version of `notmuch-hello-filtered-query' to handle query equal to *."
 Maintained by `notmuch-multi-accounts-saved-searches-set' so stale bindings
 are removed when accounts are reconfigured.")
 
-(defcustom notmuch-multi-accounts-saved-searches
-  `((:account (:name "MAIN" :query "*")
-     :searches ,notmuch-saved-searches))
-  "A list of email account associated with `notmuch-saved-searches'.
-
-The saved accounts searches is a list of plist.
-Supported properties of the plist are :
-
-  :account         A `notmuch-multi-account-plist (required)'.
-  :searches        A `notmuch-saved-searches' (required)."
-  :type '(repeat :tag "Account" notmuch-multi-accounts-saved-searches-plist)
-  :tag "List of Accounts"
-  :set (lambda (symbol value)
-         (set-default symbol value)
-         (notmuch-multi-accounts-saved-searches-set value))
-  :group 'notmuch-multi)
+;; Forward declaration: the setter below assigns this variable, while the
+;; defcustom that defines it follows the setter (so the defcustom's :set can
+;; call the setter at load time).  A bare `defvar' silences the byte-compiler's
+;; free-variable warning without making the symbol `boundp', so the defcustom
+;; still initializes through its :set.
+(defvar notmuch-multi-accounts-saved-searches)
 
 ;;;###autoload
 (defun notmuch-multi-accounts-saved-searches-set (accounts-searches)
@@ -291,6 +281,23 @@ Must be used instead of setq."
           (plist-put s :name (concat account-name " - " (plist-get search :name)))
           (plist-put s :query (notmuch-multi-hello-filtered-query account-query (plist-get search :query)))
           (add-to-list 'notmuch-saved-searches s))))) notmuch-saved-searches)
+
+(defcustom notmuch-multi-accounts-saved-searches
+  `((:account (:name "MAIN" :query "*")
+     :searches ,notmuch-saved-searches))
+  "A list of email account associated with `notmuch-saved-searches'.
+
+The saved accounts searches is a list of plist.
+Supported properties of the plist are:
+
+  :account         A `notmuch-multi-account-plist (required)'.
+  :searches        A `notmuch-saved-searches' (required)."
+  :type '(repeat :tag "Account" notmuch-multi-accounts-saved-searches-plist)
+  :tag "List of Accounts"
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (notmuch-multi-accounts-saved-searches-set value))
+  :group 'notmuch-multi)
 
 
 (defun notmuch-multi--send-as-match-p (send-as addr)
