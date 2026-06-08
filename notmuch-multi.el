@@ -82,8 +82,7 @@ To delete expired emails, refer to `notmuch-multi-expire-mail'."
   `(
     "+flagged" "-unread" "-spam"
     ,(format "-%s" notmuch-multi-delete-tag)
-    ,(format "-%s" notmuch-multi-expire-tag)
-    )
+    ,(format "-%s" notmuch-multi-expire-tag))
   "List of tags to mark as important (flagged).
 This gets the `notmuch-tag-flagged' face, if that is specified in
 `notmuch-tag-formats'."
@@ -211,8 +210,7 @@ An account is a plist. Supported properties are
                   (string :format "%v"))
            (group :format "%v" :inline t
                   (const :format "  Send-as (From: match): " :send-as)
-                  (sexp :format "%v")))
-          ))
+                  (sexp :format "%v")))))
 
 (define-widget 'notmuch-multi-accounts-saved-searches-plist 'list
   "A set of accounts associated with his saved searches list."
@@ -224,9 +222,7 @@ An account is a plist. Supported properties are
                   notmuch-multi-account-plist)
            (group :format "%v" :inline t
                   (const :format "Account Searches:\n" :searches)
-                  (repeat :tag "Search" notmuch-saved-search-plist))
-           )
-          ))
+                  (repeat :tag "Search" notmuch-saved-search-plist)))))
 
 (defun notmuch-multi-hello-filtered-query (query filter)
   "Constructs a query to search all messages matching QUERY and FILTER.
@@ -242,6 +238,23 @@ Modified version of `notmuch-hello-filtered-query' to handle query equal to *."
   "Key sequences bound in `notmuch-hello-mode-map' for per-account mail fetch.
 Maintained by `notmuch-multi-accounts-saved-searches-set' so stale bindings
 are removed when accounts are reconfigured.")
+
+(defcustom notmuch-multi-accounts-saved-searches
+  `((:account (:name "MAIN" :query "*")
+     :searches ,notmuch-saved-searches))
+  "A list of email account associated with `notmuch-saved-searches'.
+
+The saved accounts searches is a list of plist.
+Supported properties of the plist are :
+
+  :account         A `notmuch-multi-account-plist (required)'.
+  :searches        A `notmuch-saved-searches' (required)."
+  :type '(repeat :tag "Account" notmuch-multi-accounts-saved-searches-plist)
+  :tag "List of Accounts"
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (notmuch-multi-accounts-saved-searches-set value))
+  :group 'notmuch-multi)
 
 ;;;###autoload
 (defun notmuch-multi-accounts-saved-searches-set (accounts-searches)
@@ -274,29 +287,11 @@ Must be used instead of setq."
           (when search
             (when (not (string= kprefix ""))
               (let ((keydesc (key-description (plist-get search :key))))
-                (plist-put s :key (kbd (concat kprefix keydesc))))
-              ))
+                (plist-put s :key (kbd (concat kprefix keydesc))))))
           (plist-put s :name (concat account-name " - " (plist-get search :name)))
           (plist-put s :query (notmuch-multi-hello-filtered-query account-query (plist-get search :query)))
-          (add-to-list 'notmuch-saved-searches s)))
-      )) notmuch-saved-searches)
+          (add-to-list 'notmuch-saved-searches s))))) notmuch-saved-searches)
 
-(defcustom notmuch-multi-accounts-saved-searches
-  `((:account (:name "MAIN" :query "*")
-     :searches ,notmuch-saved-searches))
-  "A list of email account associated with `notmuch-saved-searches'.
-
-The saved accounts searches is a list of plist.
-Supported properties of the plist are :
-
-  :account         A `notmuch-multi-account-plist (required)'.
-  :searches        A `notmuch-saved-searches' (required)."
-  :type '(repeat :tag "Account" notmuch-multi-accounts-saved-searches-plist)
-  :tag "List of Accounts"
-  :set (lambda (symbol value)
-         (set-default symbol value)
-         (notmuch-multi-accounts-saved-searches-set value))
-  :group 'notmuch-multi)
 
 (defun notmuch-multi--send-as-match-p (send-as addr)
   "Return non-nil when ADDR matches SEND-AS.
@@ -444,15 +439,10 @@ only the tags it would add."
     (mapc
      (lambda (str)
        (when (string-match "^[^-]" str)
-         (add-to-list 'rmtags str)
-         )) tags)
-    rmtags
-    ))
+         (add-to-list 'rmtags str))) tags) rmtags))
 
 (defmacro notmuch-multi-search-tag-thread (name tags)
-  "Produce NAME function parsing TAGS.
-Modified version of
-https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
+  "Produce NAME function parsing TAGS."
   (declare (indent defun))
   `(defun ,name  (&optional untag beg end)
      ,(format
@@ -496,7 +486,7 @@ This function advances to the next thread when finished."
   (declare (indent defun))
   `(defun ,name (&optional untag)
      ,(format
-       "Mark with `%s' all the messages in the search buffer.
+       "Mark with `%s' all messages in the search buffer.
 
 Operate on each message in the current search buffer.
 
@@ -526,13 +516,12 @@ reverse the application of the *added* tags."
   notmuch-multi-mark-spam-tags)
 
 (defmacro notmuch-multi-tree-tag-message (name tags)
-  "Produce NAME function parsing TAGS.
-Modified version of
-https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
+  "Produce NAME function parsing TAGS."
   (declare (indent defun))
   `(defun ,name (&optional repeat)
      ,(format
-       "Mark with `%s' the currently selected message in notmuch-tree-mode.
+       "Mark with `%s' the currently selected message.
+Operate in `notmuch-tree-mode'.
 
 With optional prefix argument as REPEAT, a number:
 - if <= 0: reverse the application of the *added* tags
@@ -548,7 +537,6 @@ This function advances to the next message when finished."
        (when rmtags
          (let ((i 0))
            (while (< i count)
-             (message "Code block is running")
              (setq i (1+ i))
              (notmuch-tree-tag (notmuch-tag-change-list rmtags untag))
              (notmuch-tree-next-message)))))))
@@ -573,9 +561,10 @@ This function advances to the next message when finished."
 (defmacro notmuch-multi-tree-tag-thread (name tags)
   "Produce NAME function parsing TAGS."
   (declare (indent defun))
-  `(defun ,name (&optional untag beg end)
+  `(defun ,name (&optional untag _beg _end)
      ,(format
-       "Mark with `%s' all message of the the current thread in notmuch-tree-mode.
+       "Mark with `%s' all message of the current thread
+in notmuch-tree-mode.
 
 With optional prefix argument (\\[universal-argument]) as UNTAG,
 reverse the application of the *added* tags."
@@ -603,8 +592,7 @@ reverse the application of the *added* tags."
   notmuch-multi-mark-spam-tags)
 
 (defmacro notmuch-multi-show-tag-message (name tags)
-  "Produce NAME function parsing TAGS.
-Source : https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
+  "Produce NAME function parsing TAGS."
   (declare (indent defun))
   `(defun ,name (&optional untag)
      ,(format
@@ -1065,8 +1053,7 @@ Usage: (notmuch-multi-count-query \"folder:here and tag:unread\")"
 
 (defun notmuch-multi--notmuch-delete-mail-by-query (query)
   "Permanently delete mails matching the notmuch QUERY.
-Prompt for confirmation before carrying out the operation.
-Inspired from : https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
+Prompt for confirmation before carrying out the operation."
   (interactive)
   (let* ((count (notmuch-multi-count-query query))
          (mail (if (> count 1) "mails" "mail")))
@@ -1082,8 +1069,7 @@ Inspired from : https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.
 (defun notmuch-multi-refresh-buffer (&optional arg)
   "Run `notmuch-refresh-this-buffer'.
 With optional prefix ARG (\\[universal-argument]) call
-`notmuch-refresh-all-buffers'.
-Source : https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el"
+`notmuch-refresh-all-buffers'."
   (interactive "P")
   (if arg
       (notmuch-refresh-all-buffers)
@@ -1115,8 +1101,7 @@ Inspiration : https://github.com/magnars/s.el"
       (let*
           ((bs (buffer-substring (point-min) (point-max)))
            (shorted (replace-regexp-in-string "\\(\n.*\\)+" "" bs))
-           (elid (if (eq (length bs ) (length shorted)) "" ellipsis))
-           )
+           (elid (if (eq (length bs ) (length shorted)) "" ellipsis)))
         (concat shorted elid)))))
 
 (defun notmuch-multi--get-subject (msg)
