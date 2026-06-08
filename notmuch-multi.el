@@ -5,7 +5,7 @@
 ;; Author: Philippe IVALDI <emacs@ivaldi.me>
 ;; Maintainer: Philippe IVALDI <emacs@ivaldi.me>
 ;; Created: January 09, 2025
-;; Version: 0.2.1
+;; Version: 0.2.2
 ;; Keywords: mail notmuch
 ;; Homepage: https://github.com/pivaldi/notmuch-multi
 ;; Package-Requires: ((emacs "29") (notmuch "0.38.3"))
@@ -52,7 +52,9 @@ This is used by `notmuch-multi-delete-mail'."
 
 (defcustom notmuch-multi-expire-tag "expire"
   "Single tag that applies to mail marked for expiration.
-A message tagged as expirable will be removed after `'
+
+A message tagged as expirable will be removed after
+`notmuch-multi-expire-delay' days.
 This is used by `notmuch-multi-expire-mail'."
   :type 'string
   :group 'notmuch-multi)
