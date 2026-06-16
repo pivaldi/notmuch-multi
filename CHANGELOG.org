@@ -1,0 +1,37 @@
+#+TITLE: Changelog
+#+AUTHOR: Philippe IVALDI
+
+All notable changes to notmuch-multi are documented here.
+
+* 0.2.3 (2026-06-16)
+
+** Fixes
+- Expand =;;; Commentary:= with package description, setup instructions,
+  tagging/deletion and subject-formatting summaries, and a "SUGGESTED
+  KEYBINDINGS" section (addresses MELPA review feedback).
+- Remove top-level =define-key= calls for =notmuch-hello-mode-map= and
+  =notmuch-message-mode-map=; bindings are now opt-in snippets documented
+  in Commentary to avoid silently overwriting user configuration.
+- Replace =(> (point) (point-min))= with =(not (bobp))= in
+  =notmuch-multi--account-at-point=.
+- Use =#'= sharp-quote for function references in =apply= calls.
+
+* 0.2.2 (2026-05-XX)
+
+** Fixes
+- Define =notmuch-multi-accounts-saved-searches= setter before its
+  =defcustom= to fix load-order error.
+- Fix checkdoc and byte-compile warnings.
+
+* 0.2.1
+
+** Fixes
+- Sanitize double quotes from typed prefix in
+  =notmuch-multi-address-default-prefix-matcher= before interpolating
+  into a notmuch quoted phrase.
+
+** Features
+- Per-account address completion (=notmuch-multi-address-complete=).
+- Scheduled per-account mail fetches (=notmuch-multi-schedule-start=).
+- Fetch mail per account from the hello screen
+  (=notmuch-multi-get-mail-at-point=).

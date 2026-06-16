@@ -5,7 +5,7 @@
 ;; Author: Philippe IVALDI <emacs@ivaldi.me>
 ;; Maintainer: Philippe IVALDI <emacs@ivaldi.me>
 ;; Created: January 09, 2025
-;; Version: 0.2.2
+;; Version: 0.2.3
 ;; Keywords: mail notmuch
 ;; Homepage: https://github.com/pivaldi/notmuch-multi
 ;; Package-Requires: ((emacs "29") (notmuch "0.38.3"))
@@ -27,8 +27,73 @@
 ;;
 ;;; Commentary:
 ;;
-;; Most code is inspired from
-;; https://gitlab.com/protesilaos/dotfiles/-/blob/master/emacs/.emacs.d/prot-emacs-modules/prot-emacs-notmuch.el?ref_type=heads
+;; This package extends the Notmuch Emacs UI to handle multiple mail
+;; accounts cleanly.  Stock Notmuch shows all saved searches in a flat
+;; list; notmuch-multi groups them by account on the hello screen,
+;; adds an unread/total count display, and scopes `notmuch-jump' key
+;; bindings per account.  It also provides a soft-delete/expire
+;; tagging workflow and prettier subject formatting for search and tree
+;; views.
+;;
+;; SETUP
+;;
+;; 1. Declare your accounts and per-account searches via the
+;;    `notmuch-multi-accounts-saved-searches' custom variable (or the
+;;    corresponding Customize UI).  Each entry pairs an account plist
+;;    (:name, :query, :key-prefix, optionally :get-command) with a
+;;    list of saved searches in the standard `notmuch-saved-searches'
+;;    format.  Setting this variable automatically flattens the
+;;    per-account searches into `notmuch-saved-searches' with prefixed
+;;    names and keys.
+;;
+;; 2. Add `notmuch-multi-hello-insert-accounts-searches' to
+;;    `notmuch-hello-sections' to display one collapsible section per
+;;    account on the Notmuch hello screen.
+;;
+;; TAGGING AND DELETION
+;;
+;; Interactive tagging commands are generated for four tag sets
+;; (delete / expire / flag / spam) across three Notmuch modes:
+;;
+;;   notmuch-multi-search-{delete,expire,flag,spam}-thread  -- search-mode
+;;   notmuch-multi-tree-{delete,expire,flag,spam}-message   -- tree-mode
+;;   notmuch-multi-show-{delete,expire,flag,spam}-message   -- show-mode
+;;
+;; Calling any command with a prefix argument reverses (untags) the
+;; operation.  In tree-mode a numeric prefix repeats the operation N
+;; times.
+;;
+;; Actual file removal is separate and explicit:
+;;   `notmuch-multi-delete-mail'          -- rm files tagged for deletion
+;;   `notmuch-multi-delete-expirable-mail' -- rm files tagged expire + old
+;;   `notmuch-multi-delete-d+e-mail'      -- both of the above
+;;
+;; SUBJECT FORMATTING
+;;
+;; `notmuch-multi-search-format-subject' and
+;; `notmuch-multi-tree-format-subject' can be plugged into
+;; `notmuch-search-result-format' and `notmuch-tree-result-format'
+;; respectively.  They truncate subjects at a word boundary, strip
+;; emoji, and highlight by read/unread/match state.
+;;
+;; SUGGESTED KEYBINDINGS
+;;
+;; This package does not bind any keys by default to avoid overwriting
+;; user configuration.  Suggested bindings to add to your init file:
+;;
+;;   ;; Fetch mail for the account at point in the hello screen:
+;;   (with-eval-after-load 'notmuch-hello
+;;     (define-key notmuch-hello-mode-map (kbd "M-g")
+;;                 #'notmuch-multi-get-mail-at-point))
+;;
+;;   ;; Address completion scoped to the sending account:
+;;   (with-eval-after-load 'notmuch-message
+;;     (define-key notmuch-message-mode-map (kbd "C-c TAB")
+;;                 #'notmuch-multi-address-complete))
+;;
+;; Most of the tagging logic is adapted from Protesilaos Stavrou's
+;; Notmuch configuration:
+;; https://gitlab.com/protesilaos/dotfiles/-/blob/master/emacs/.emacs.d/prot-emacs-modules/prot-emacs-notmuch.el
 ;; https://git.sr.ht/~protesilaos/dotfiles/tree/master/item/emacs/.emacs.d/prot-lisp/prot-notmuch.el
 ;;
 ;;; Code:
@@ -422,8 +487,6 @@ report and do nothing."
           (completion-at-point-functions (list #'notmuch-multi--address-capf)))
       (completion-at-point)))))
 
-(define-key notmuch-message-mode-map (kbd "C-c TAB") #'notmuch-multi-address-complete)
-
 (defface notmuch-multi-hello-header-face
   '((t :foreground "white"
      :background "blue"
@@ -475,20 +538,20 @@ This function advances to the next thread when finished."
            (notmuch-search-next-thread))))))
 
 (notmuch-multi-search-tag-thread
-  notmuch-multi-search-delete-thread
-  notmuch-multi-mark-delete-tags)
+ notmuch-multi-search-delete-thread
+ notmuch-multi-mark-delete-tags)
 
 (notmuch-multi-search-tag-thread
-  notmuch-multi-search-expire-thread
-  notmuch-multi-mark-expire-tags)
+ notmuch-multi-search-expire-thread
+ notmuch-multi-mark-expire-tags)
 
 (notmuch-multi-search-tag-thread
-  notmuch-multi-search-flag-thread
-  notmuch-multi-mark-flag-tags)
+ notmuch-multi-search-flag-thread
+ notmuch-multi-mark-flag-tags)
 
 (notmuch-multi-search-tag-thread
-  notmuch-multi-search-spam-thread
-  notmuch-multi-mark-spam-tags)
+ notmuch-multi-search-spam-thread
+ notmuch-multi-mark-spam-tags)
 
 (defmacro notmuch-multi-search-tag-all (name tags)
   "Produce NAME function parsing TAGS."
@@ -509,20 +572,20 @@ reverse the application of the *added* tags."
 
 
 (notmuch-multi-search-tag-all
-  notmuch-multi-search-delete-all
-  notmuch-multi-mark-delete-tags)
+ notmuch-multi-search-delete-all
+ notmuch-multi-mark-delete-tags)
 
 (notmuch-multi-search-tag-all
-  notmuch-multi-search-expire-all
-  notmuch-multi-mark-expire-tags)
+ notmuch-multi-search-expire-all
+ notmuch-multi-mark-expire-tags)
 
 (notmuch-multi-search-tag-all
-  notmuch-multi-search-flag-all
-  notmuch-multi-mark-flag-tags)
+ notmuch-multi-search-flag-all
+ notmuch-multi-mark-flag-tags)
 
 (notmuch-multi-search-tag-all
-  notmuch-multi-search-spam-all
-  notmuch-multi-mark-spam-tags)
+ notmuch-multi-search-spam-all
+ notmuch-multi-mark-spam-tags)
 
 (defmacro notmuch-multi-tree-tag-message (name tags)
   "Produce NAME function parsing TAGS."
@@ -551,20 +614,20 @@ This function advances to the next message when finished."
              (notmuch-tree-next-message)))))))
 
 (notmuch-multi-tree-tag-message
-  notmuch-multi-tree-delete-message
-  notmuch-multi-mark-delete-tags)
+ notmuch-multi-tree-delete-message
+ notmuch-multi-mark-delete-tags)
 
 (notmuch-multi-tree-tag-message
-  notmuch-multi-tree-expire-message
-  notmuch-multi-mark-expire-tags)
+ notmuch-multi-tree-expire-message
+ notmuch-multi-mark-expire-tags)
 
 (notmuch-multi-tree-tag-message
-  notmuch-multi-tree-flag-message
-  notmuch-multi-mark-flag-tags)
+ notmuch-multi-tree-flag-message
+ notmuch-multi-mark-flag-tags)
 
 (notmuch-multi-tree-tag-message
-  notmuch-multi-tree-spam-message
-  notmuch-multi-mark-spam-tags)
+ notmuch-multi-tree-spam-message
+ notmuch-multi-mark-spam-tags)
 
 
 (defmacro notmuch-multi-tree-tag-thread (name tags)
@@ -585,20 +648,20 @@ reverse the application of the *added* tags."
          (notmuch-tree-next-thread)))))
 
 (notmuch-multi-tree-tag-thread
-  notmuch-multi-tree-delete-thread
-  notmuch-multi-mark-delete-tags)
+ notmuch-multi-tree-delete-thread
+ notmuch-multi-mark-delete-tags)
 
 (notmuch-multi-tree-tag-thread
-  notmuch-multi-tree-expire-thread
-  notmuch-multi-mark-expire-tags)
+ notmuch-multi-tree-expire-thread
+ notmuch-multi-mark-expire-tags)
 
 (notmuch-multi-tree-tag-thread
-  notmuch-multi-tree-flag-thread
-  notmuch-multi-mark-flag-tags)
+ notmuch-multi-tree-flag-thread
+ notmuch-multi-mark-flag-tags)
 
 (notmuch-multi-tree-tag-thread
-  notmuch-multi-tree-spam-thread
-  notmuch-multi-mark-spam-tags)
+ notmuch-multi-tree-spam-thread
+ notmuch-multi-mark-spam-tags)
 
 (defmacro notmuch-multi-show-tag-message (name tags)
   "Produce NAME function parsing TAGS."
@@ -612,24 +675,24 @@ reverse the application of the tags."
        tags)
      (interactive "P")
      (when ,tags
-       (apply 'notmuch-show-tag-message
+       (apply #'notmuch-show-tag-message
               (notmuch-tag-change-list ,tags untag)))))
 
 (notmuch-multi-show-tag-message
-  notmuch-multi-show-delete-message
-  notmuch-multi-mark-delete-tags)
+ notmuch-multi-show-delete-message
+ notmuch-multi-mark-delete-tags)
 
 (notmuch-multi-show-tag-message
-  notmuch-multi-show-expire-message
-  notmuch-multi-mark-expire-tags)
+ notmuch-multi-show-expire-message
+ notmuch-multi-mark-expire-tags)
 
 (notmuch-multi-show-tag-message
-  notmuch-multi-show-flag-message
-  notmuch-multi-mark-flag-tags)
+ notmuch-multi-show-flag-message
+ notmuch-multi-mark-flag-tags)
 
 (notmuch-multi-show-tag-message
-  notmuch-multi-show-spam-message
-  notmuch-multi-mark-spam-tags)
+ notmuch-multi-show-spam-message
+ notmuch-multi-mark-spam-tags)
 
 
 (defun notmuch-multi-hello-query-insert (cnt query elem)
@@ -807,7 +870,7 @@ Supports the following entries in OPTIONS as a plist:
                      title))
     (widget-insert "\n")
     (unless is-hidden
-      (let ((searches (apply 'notmuch-multi-hello-query-counts query-list options)))
+      (let ((searches (apply #'notmuch-multi-hello-query-counts query-list options)))
         (when (or (not (plist-get options :hide-if-empty))
                   searches)
           (widget-insert "\n")
@@ -856,7 +919,7 @@ property by `notmuch-multi-hello-insert-account-searches'.  When point
 sits on the blank line separating two sections, the property is read
 from the preceding character, so the section just above point wins."
   (or (get-text-property (point) 'notmuch-multi-account)
-      (and (> (point) (point-min))
+      (and (not (bobp))
            (get-text-property (1- (point)) 'notmuch-multi-account))))
 
 (defun notmuch-multi--refresh-hello-buffers ()
@@ -929,8 +992,6 @@ in `notmuch-hello-mode'.  See `notmuch-multi--get-account-mail'."
     (unless account
       (user-error "No account at point"))
     (notmuch-multi--get-account-mail account)))
-
-(define-key notmuch-hello-mode-map (kbd "M-g") #'notmuch-multi-get-mail-at-point)
 
 (defun notmuch-multi--valid-interval-p (iv)
   "Return non-nil when IV is usable as a `run-at-time' REPEAT value.
@@ -1057,7 +1118,7 @@ Usage: (notmuch-multi-count-query \"folder:here and tag:unread\")"
                   (shell-command
                    (format "notmuch count --exclude=false tag:deleted %s" query) t)
                   (buffer-substring-no-properties (point-min) (1- (point-max)))))))
-    (message (format "%d" count))
+    (message "%d" count)
     count))
 
 (defun notmuch-multi--notmuch-delete-mail-by-query (query)
