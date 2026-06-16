@@ -250,6 +250,13 @@ account plist (a shell command string) :
     :searches ,pi-notmuch-saved-searches)))
 #+end_src
 
+To bind the interactive fetch command, add to your init file :
+#+begin_src lisp
+(with-eval-after-load 'notmuch-hello
+  (define-key notmuch-hello-mode-map (kbd "M-g")
+              #'notmuch-multi-get-mail-at-point))
+#+end_src
+
 Then, in the =notmuch-hello= buffer :
 - =M-g= fetches the account whose section point is in.
 - =a <key-prefix> g= fetches a named account regardless of point — e.g. =a i g=
@@ -308,9 +315,16 @@ silent (failures are always reported) :
 * Per-account address completion
 
 Notmuch's native address completion (=<TAB>= in a recipient header) is global.\\
-~notmuch-multi~ adds an account-scoped completion command bound to =C-c TAB= in
-message buffers: it completes the recipient at point using only addresses drawn
-from the active account's mail, ordered by how often you have corresponded.
+~notmuch-multi~ adds an account-scoped completion command
+(=notmuch-multi-address-complete=) that completes the recipient at point using
+only addresses drawn from the active account's mail, ordered by how often you
+have corresponded.  The package does not bind this command by default; add to
+your init file :
+#+begin_src lisp
+(with-eval-after-load 'notmuch-message
+  (define-key notmuch-message-mode-map (kbd "C-c TAB")
+              #'notmuch-multi-address-complete))
+#+end_src
 
 The active account is the one whose =:send-as= regexp matches the message =From:=
 header. Candidates are harvested with =notmuch address= scoped by the account's
@@ -342,9 +356,11 @@ On an empty recipient (or right after a comma) =C-c TAB= offers all of the accou
 - ~notmuch-multi-address-prefix-matcher~ — function turning the typed prefix into
   a query clause (default: =from:"PREFIX*"= or =cc:"PREFIX*"=).
 
-To rebind the key :
+To use a different key :
 #+begin_src lisp
-(define-key notmuch-message-mode-map (kbd "C-c C-a") #'notmuch-multi-address-complete)
+(with-eval-after-load 'notmuch-message
+  (define-key notmuch-message-mode-map (kbd "C-c C-a")
+              #'notmuch-multi-address-complete))
 #+end_src
 
 Notmuch's native global completion on =<TAB>= is unchanged and remains available.
